@@ -1939,10 +1939,11 @@ function setDash(v){S.strokeDash=v;updateDashBtns();applyStrokeToSelected();}
 function updateDashBtns(){[{id:'dash-solid',v:''},{id:'dash-dashed',v:'8,5'},{id:'dash-dotted',v:'2,5'}].forEach(({id,v})=>$(id)?.classList.toggle('active',S.strokeDash===v));}
 function toggleStrokePicker(e){e?.stopPropagation();$('stroke-picker').classList.toggle('open');}
 document.addEventListener('click',e=>{
-  if(!$('stroke-picker').contains(e.target)&&e.target.id!=='stroke-settings-btn')
+  // closest() findet den Button auch wenn auf ein SVG/path/circle INNERHALB des Buttons geklickt wurde
+  if(!$('stroke-picker').contains(e.target)&&!e.target.closest?.('#stroke-settings-btn'))
     $('stroke-picker').classList.remove('open');
   const tp=$('text-picker');
-  if(tp&&!tp.contains(e.target)&&e.target.id!=='tool-text-opts')
+  if(tp&&!tp.contains(e.target)&&!e.target.closest?.('#tool-text-opts'))
     tp.classList.remove('open');
 });
 
@@ -2173,7 +2174,7 @@ async function buildPdfViewer(dataUrl, name, containerH='100%', initialScale=1.5
   return wrap;
 }
 
-document.addEventListener('click',e=>{const tp=$('text-picker');const tb=$('tool-text-opts');if(tp&&!tp.contains(e.target)&&e.target!==tb)tp.classList.remove('open');if(!ddMenu.contains(e.target))ddMenu.style.display='none';});
+document.addEventListener('click',e=>{const tp=$('text-picker');const tb=$('tool-text-opts');if(tp&&!tp.contains(e.target)&&!e.target.closest?.('#tool-text-opts'))tp.classList.remove('open');if(!ddMenu.contains(e.target))ddMenu.style.display='none';});
 
 // ═══════════════════════════════════════════════
 //  ITEM CREATION
