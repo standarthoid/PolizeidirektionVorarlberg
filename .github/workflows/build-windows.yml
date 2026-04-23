@@ -1,6 +1,7 @@
+name: Build Windows
 on:
   push:
-    branches: [main, shape-reordering, shape-reordering1, shape-reordering2]
+    branches: [main]
   workflow_dispatch:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -26,6 +27,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path src-tauri/dist | Out-Null
           Copy-Item index.html src-tauri/dist/ -Verbose
           Copy-Item boarddesk-tauri-bridge.js src-tauri/dist/ -Verbose
+          Copy-Item logo.svg src-tauri/dist/ -Verbose
           Write-Host "=== Inhalt von src-tauri/dist/ nach Copy ==="
           Get-ChildItem src-tauri/dist -Force
           Write-Host "=== Groesse der index.html ==="
@@ -46,7 +48,7 @@ jobs:
       - name: Installer hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: BoardDesk-Windows
+          name: LPD-Vorarlberg-Windows
           path: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
