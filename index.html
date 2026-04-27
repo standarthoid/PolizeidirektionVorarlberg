@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<!-- Landespolizeidirektion Vorarlberg — Whiteboard, Offline Edition — keine externen Abhängigkeiten
+<!-- BoardDesk — Offline Edition — keine externen Abhängigkeiten
      Als PWA installierbar: Im Browser auf "Installieren" klicken (Chrome/Edge-Adressleiste)
 -->
 <html lang="de">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Landespolizeidirektion Vorarlberg</title>
+<title>BoardDesk</title>
 <meta name="author" content="Miriam Hanke">
 <meta name="publisher" content="Hankemacht – Miriam Hanke">
 <meta name="copyright" content="Hankemacht – Miriam Hanke">
@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#0e0f11">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="LPD Vorarlberg">
+<meta name="apple-mobile-web-app-title" content="BoardDesk">
 
 
 <style>
@@ -279,16 +279,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 /* Im compact-Modus: nur die fünf Hauptwerkzeuge zeigen, Rest ausblenden */
 #toolbar.compact > *{display:none;}
 #toolbar.compact > #tool-select,
+#toolbar.compact > #tool-pan,
 #toolbar.compact > #tool-pen,
 #toolbar.compact > #tool-line,
 #toolbar.compact > #tool-arrow,
 #toolbar.compact > #tool-eraser{display:flex;}
-/* Active-State: gedämpfter, grauer als das knallige Türkis — passt zum "Präsentations-Look" */
-.tool-btn.active{background:var(--surface2);color:var(--text);border:1px solid var(--border-hi);}
-.side-btn.active{background:var(--surface2);color:var(--text);border-color:var(--border-hi);}
 .tool-btn{width:38px;height:38px;border-radius:8px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s;position:relative;flex-shrink:0;}
 .tool-btn:hover{background:var(--surface2);color:var(--text);}
-/* .tool-btn.active wird oben definiert mit gedämpftem Look */
+.tool-btn.active{background:var(--accent);color:#000;}
 .tool-sep{width:1px;height:20px;background:var(--border);margin:0 3px;}
 .tool-tip{position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:10px;font-family:var(--mono);padding:3px 7px;border-radius:5px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s;z-index:10;}
 .tool-btn:hover .tool-tip{opacity:1;}
@@ -491,16 +489,11 @@ window._pdfjsReady = (function(){
     return import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs')
       .then(function(mod){
         var pdfjsLib = mod;
-        // Worker als Blob-URL laden — umgeht CSP-Einschränkung für worker-src in Tauri/WebView2.
         var workerUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
         fetch(workerUrl)
           .then(function(r){ return r.blob(); })
-          .then(function(b){
-            pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(b);
-          })
-          .catch(function(){
-            pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-          });
+          .then(function(b){ pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(b); })
+          .catch(function(){ pdfjsLib.GlobalWorkerOptions.workerSrc = ''; });
         window.pdfjsLib = pdfjsLib;
         return pdfjsLib;
       })
@@ -577,9 +570,11 @@ window._pdfjsReady = (function(){
   <div id="bp-list"></div>
   <div id="bp-footer">
     <button class="bp-btn primary" id="btn-new-board" data-onclick="newBoard()">+ Neues Board</button>
-    <button class="bp-btn" id="btn-export-board" data-onclick="showBoardSizeInfo()">⬇ Dieses Board (.json)</button>
-    <button class="bp-btn" id="btn-export-all" data-onclick="exportAllBoards()">⬇ Alle Boards (.json)</button>
-    <button class="bp-btn" id="btn-import-board" data-onclick="window._openFileInput('import-input','.json',true,importBoard)">⬆ Board(s) importieren</button>
+    <button class="bp-btn" id="btn-save-board-file" data-onclick="saveBoardAsFile()">💾 Dieses Board speichern</button>
+    <button class="bp-btn" id="btn-open-board-file" data-onclick="openBoardFromFile()">📂 Board öffnen</button>
+    <button class="bp-btn" id="btn-export-board" data-onclick="showBoardSizeInfo()" style="font-size:11px;opacity:.75;">⬇ Als .json exportieren</button>
+    <button class="bp-btn" id="btn-export-all" data-onclick="exportAllBoards()" style="font-size:11px;opacity:.75;">⬇ Alle Boards als .json</button>
+    <button class="bp-btn" id="btn-import-board" data-onclick="window._openFileInput('import-input','.json,.board',true,importBoard)" style="font-size:11px;opacity:.75;">⬆ .json importieren</button>
     <div style="height:1px;background:var(--border);margin:6px 0;"></div>
     <button class="bp-btn" id="btn-clear-cache" data-onclick="clearAppCache()" style="color:#e74c3c;border-color:#e74c3c;font-size:10px;">🗑 Cache & Daten leeren</button>
   </div>
@@ -594,14 +589,13 @@ window._pdfjsReady = (function(){
 
 <!-- HEADER -->
 <div id="header">
-  <img src="logo.svg" alt="LPD Vorarlberg" id="header-logo" style="width:28px;height:28px;flex-shrink:0;margin-right:4px;" onerror="this.style.display='none'">
-  <button class="hdr-btn" id="boards-btn" data-onclick="toggleBoardPanel()" style="font-weight:600;padding:5px 10px;gap:5px;display:flex;align-items:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> <span id="boards-btn-label">Boards</span></button>
-  <div style="width:1px;height:22px;background:var(--border);flex-shrink:0"></div>
-  <div id="board-name-display" data-onclick="startBoardRename()" title="Klicken zum Bearbeiten">Mein Board</div>
+  <button class="hdr-btn" id="boards-btn" data-onclick="toggleBoardPanel()" style="font-weight:600;padding:5px 10px;gap:5px;display:flex;align-items:center;"><span id="boards-btn-label">Boards</span></button>
+  <div id="board-name-display" data-onclick="startBoardRename()" title="Klicken zum Bearbeiten" style="display:none;">Mein Board</div>
   <input id="board-name-input" onblur="commitBoardRename()" onkeydown="if(event.key==='Enter')commitBoardRename();event.stopPropagation();">
   <div class="hdr-space"></div>
   <label class="hdr-btn upload-only" data-onclick="window._openFileInput('bg-upload-input','image/*',false,handleBgUpload)" title="Hintergrundbild hochladen" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><polyline points="3 18 9 13 14 17 21 11 21 20"/></svg> Hintergrundbild</label>
   <button class="hdr-btn upload-only" data-onclick="openBgSettingsModal()" title="Hintergrundeinstellungen" style="padding:4px 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.5"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  <button class="hdr-btn" data-onclick="openImageSettingsModal()" title="Bild-Qualitätseinstellungen" style="padding:4px 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><polyline points="3 18 9 13 14 17 21 11 21 20"/><circle cx="20" cy="20" r="3" fill="var(--surface)"/><path d="M20 18.5v3M18.5 20h3" stroke-width="1.5"/></svg></button>
   <label class="hdr-btn" data-onclick="window._openColorInput(S.bgColor,setBgColor)" title="Hintergrundfarbe ändern" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 L4 14 a8 8 0 1 0 16 0 Z"/></svg> Hintergrundfarbe</label>
   <button class="hdr-btn" id="layer-btn" data-onclick="toggleLayerPanel()" title="Ebenen" style="display:inline-flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 22 8 12 14 2 8 12 2"/><polyline points="2 16 12 22 22 16"/><polyline points="2 12 12 18 22 12"/></svg> Ebenen</button>
   <button class="hdr-btn" id="present-btn" data-onclick="togglePresentation()" style="display:inline-flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 3 3 8 3"/><polyline points="21 8 21 3 16 3"/><polyline points="3 16 3 21 8 21"/><polyline points="21 16 21 21 16 21"/></svg> Präsentation</button>
@@ -641,7 +635,8 @@ window._pdfjsReady = (function(){
   <button class="tool-btn" id="btn-add-note" data-onclick="addNote()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="16" x2="14" y2="16"/></svg><span class="tool-tip">Notiz (N)</span></button>
   <button class="tool-btn" id="btn-add-folder" data-onclick="openFolderModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="tool-tip">Ordner (F)</span></button>
   <label class="tool-btn upload-only" data-onclick="window._openFileInput('file-upload','.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.mp4,.mov,.webm,.m4v,.mpeg',true,handleFileUpload)" title="Datei hochladen" style="cursor:pointer;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/></svg><span class="tool-tip">Datei hochladen</span></label>
-  <label class="tool-btn upload-only" data-onclick="window._openFileInput('img-upload','image/*',true,handleImageUpload)" title="Bild ablegen" style="cursor:pointer;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><polyline points="3 18 9 13 14 17 21 11 21 20"/></svg><span class="tool-tip">Bild ablegen</span></label>
+  <label class="tool-btn upload-only" data-onclick="window._openFileInput('img-upload','image/*',true,handleImageUpload)" title="Bild ablegen (komprimiert)" style="cursor:pointer;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><polyline points="3 18 9 13 14 17 21 11 21 20"/></svg><span class="tool-tip">Bild (komprimiert)</span></label>
+  <label class="tool-btn upload-only" data-onclick="window._openFileInput('img-upload-orig','image/*',true,handleImageUploadOriginal)" title="Bild ablegen (Originalqualität)" style="cursor:pointer;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6 L7 4 L13 6 L21 3 L21 18 L17 20 L11 18 L3 21 Z"/><path d="M7 4 L7 20"/><path d="M13 6 L13 20"/><path d="M17 4 L17 20"/></svg><span class="tool-tip">Karte/Bild (Original)</span></label>
   <div class="tool-sep"></div>
   <button class="tool-btn" id="tool-grid" data-onclick="toggleGrid()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg><span class="tool-tip">Raster (G)</span></button>
   <button class="tool-btn" data-onclick="clearSelected()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg><span class="tool-tip">Löschen (Del)</span></button>
@@ -687,7 +682,7 @@ window._pdfjsReady = (function(){
   <button class="side-btn" data-onclick="undoStroke()" title="Rückgängig (Strg+Z)">↩</button>
   <button class="side-btn" data-onclick="clearDrawings()" title="Zeichnungen löschen">🗑</button>
   <div class="side-sep"></div>
-  <button class="side-btn" id="toolbar-compact-btn" data-onclick="toggleCompactToolbar()" title="Werkzeugleiste kompakt rechts">⊟</button>
+  <button class="side-btn" id="toolbar-compact-btn" data-onclick="toggleCompactToolbar()" title="Werkzeugleiste kompakt links">⊟</button>
   <button class="side-btn" id="toolbar-toggle-btn" data-onclick="toggleToolbar()" title="Werkzeugleiste ein-/ausblenden">▾</button>
 </div>
 
@@ -812,10 +807,10 @@ function zoomBy(f,cx,cy){
 function toggleToolbar(){
   const tb=$('toolbar');
   if(!tb)return;
-  // Aus dem Compact-Modus rausnehmen, falls aktiv (verhindert Verwirrung beim Wieder-Einblenden)
+  // Falls compact aktiv → ausschalten, dann verstecken (sonst widersprüchlich)
   tb.classList.remove('compact');
   const cBtn=$('toolbar-compact-btn');
-  if(cBtn){ cBtn.classList.remove('active'); }
+  if(cBtn) cBtn.classList.remove('active');
   tb.classList.toggle('hidden');
   const isHidden=tb.classList.contains('hidden');
   const btn=$('toolbar-toggle-btn');
@@ -827,7 +822,7 @@ function toggleToolbar(){
 function toggleCompactToolbar(){
   const tb=$('toolbar');
   if(!tb)return;
-  // Falls Toolbar versteckt → erst einblenden
+  // Wenn versteckt → erst einblenden
   tb.classList.remove('hidden');
   const tBtn=$('toolbar-toggle-btn');
   if(tBtn){ tBtn.textContent='▾'; tBtn.title='Werkzeugleiste ausblenden'; }
@@ -837,7 +832,7 @@ function toggleCompactToolbar(){
   const btn=$('toolbar-compact-btn');
   if(btn){
     btn.classList.toggle('active', isCompact);
-    btn.title = isCompact ? 'Volle Werkzeugleiste anzeigen' : 'Werkzeugleiste kompakt rechts';
+    btn.title = isCompact ? 'Volle Werkzeugleiste anzeigen' : 'Werkzeugleiste kompakt links';
   }
 }
 function resetView(){
@@ -914,7 +909,6 @@ function setTool(t){
     fn();
   }
   S.tool=t;
-  // PDF-Zeichenoverlays aktivieren/deaktivieren
   const _pdfDraw=DRAW_TOOLS.includes(t);
   document.querySelectorAll('.pdf-draw-overlay').forEach(o=>{
     o.style.pointerEvents=_pdfDraw?'auto':'none';
@@ -1120,7 +1114,6 @@ function _onCanvasPointerDown(e){
     document.activeElement.blur();
   }
 
-  // Deselect auf leerem Canvas — erweiterte Bedingung
   const _onEmpty = (
     ne.target===canvas||ne.target===canvasWrap||
     ne.target.id==='canvas'||ne.target.id==='items-layer'||ne.target.id==='grid-overlay'||
@@ -1162,7 +1155,14 @@ function _onCanvasPointerDown(e){
       const svgShape=allHits.find(el=>{
         if(!el.closest('#draw-layers')) return false;
         if(el.classList&&el.classList.contains('svg-resize-handle')) return false;
-        return /^(path|line|rect|ellipse|circle|polyline|polygon)$/i.test(el.tagName);
+        if(!/^(path|line|rect|ellipse|circle|polyline|polygon)$/i.test(el.tagName)) return false;
+        const ps=el.closest('svg.layer-svg');
+        if(ps){
+          const lidStr=ps.id.replace('layer-svg-','');
+          const lyr=S.layers.find(l=>String(l.id)===lidStr);
+          if(lyr && lyr.locked) return false;
+        }
+        return true;
       });
       if(svgShape){startSvgDrag(ne,svgShape);return;}
     }
@@ -1341,7 +1341,7 @@ window.addEventListener('pointerdown', function _globalPinchSetup(e){
   // Stale-Cleanup
   if(_pointers.size>5){ _pointers.clear(); _pointers.set(e.pointerId,{x:e.clientX,y:e.clientY,type:e.pointerType}); return; }
 
-  // Long-press deaktiviert — einzelner Finger verschiebt nur.
+  // Long-press deaktiviert
   // if(_pointers.size===1 && e.pointerType==='touch' && S.tool==='select') _startLongPress(e);
 
   // Zweiter Finger → Pinch-Geste einleiten (nur Touch-Pointer zählen, nicht Stift)
@@ -1602,6 +1602,13 @@ function showSvgResizeHandle(el){
 }
 function startSvgDrag(e,el){
   e.stopPropagation();e.preventDefault();
+  const parentSvg=el.closest('svg.layer-svg');
+  if(parentSvg){
+    const lidStr=parentSvg.id.replace('layer-svg-','');
+    const lyr=S.layers.find(l=>String(l.id)===lidStr);
+    if(lyr && lyr.locked) return;
+  }
+  if(el.classList.contains('layer-locked-shape')) return;
   document.querySelectorAll('.svg-selected').forEach(x=>x.classList.remove('svg-selected'));
   el.classList.add('svg-selected');
   const pid=e.pointerId;
@@ -1791,7 +1798,18 @@ function doErase(e){if(isLayerLocked(getActiveLayer()?.id))return;
   dl.style.pointerEvents='none';
   dl.querySelectorAll('.layer-svg').forEach(s=>s.style.pointerEvents='');
   dl.querySelectorAll('.layer-svg > *:not(defs)').forEach(el=>el.style.pointerEvents='');
-  const shape=hits.find(el=>/^(path|line|rect|ellipse|circle|polyline|polygon)$/i.test(el.tagName)&&el.closest('#draw-layers')&&!(el.classList&&el.classList.contains('svg-resize-handle')));
+  const shape=hits.find(el=>{
+    if(!/^(path|line|rect|ellipse|circle|polyline|polygon)$/i.test(el.tagName)) return false;
+    if(!el.closest('#draw-layers')) return false;
+    if(el.classList&&el.classList.contains('svg-resize-handle')) return false;
+    const ps=el.closest('svg.layer-svg');
+    if(ps){
+      const lidStr=ps.id.replace('layer-svg-','');
+      const lyr=S.layers.find(l=>String(l.id)===lidStr);
+      if(lyr && lyr.locked) return false;
+    }
+    return true;
+  });
   if(shape){
     const i=S.drawings.indexOf(shape);
     if(i!==-1) S.drawings.splice(i,1);
@@ -1939,7 +1957,6 @@ function setDash(v){S.strokeDash=v;updateDashBtns();applyStrokeToSelected();}
 function updateDashBtns(){[{id:'dash-solid',v:''},{id:'dash-dashed',v:'8,5'},{id:'dash-dotted',v:'2,5'}].forEach(({id,v})=>$(id)?.classList.toggle('active',S.strokeDash===v));}
 function toggleStrokePicker(e){e?.stopPropagation();$('stroke-picker').classList.toggle('open');}
 document.addEventListener('click',e=>{
-  // closest() findet den Button auch wenn auf ein SVG/path/circle INNERHALB des Buttons geklickt wurde
   if(!$('stroke-picker').contains(e.target)&&!e.target.closest?.('#stroke-settings-btn'))
     $('stroke-picker').classList.remove('open');
   const tp=$('text-picker');
@@ -2071,7 +2088,7 @@ async function renderPdfToCanvas(dataUrl, targetCanvas, pageNum=1, scale=1.5){
 
 // Baut einen kompletten mehrseitigen PDF-Viewer als DOM-Fragment
 // Gibt das fertige Wrapper-Element zurück
-async function buildPdfViewer(dataUrl, name, containerH='100%', initialScale=1.5){
+async function buildPdfViewer(dataUrl, name, containerH='100%', initialScale=1.5, onAspectKnown=null){
   const wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;flex-direction:column;width:100%;height:'+containerH+';';
 
@@ -2152,6 +2169,17 @@ async function buildPdfViewer(dataUrl, name, containerH='100%', initialScale=1.5
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0,0,canvas.width,canvas.height);
       await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      // Beim ersten Render: tatsächliches Seitenverhältnis melden — damit die
+      // umgebende Item-Box ihr Höhen-Verhältnis daran anpassen kann.
+      if(onAspectKnown && !pdfDoc._aspectReported){
+        pdfDoc._aspectReported = true;
+        const baseVp = page.getViewport({ scale: 1 });
+        onAspectKnown({
+          width: baseVp.width,    // PDF-Punkte (1 Punkt = 1/72 Zoll)
+          height: baseVp.height,
+          aspect: baseVp.height / baseVp.width
+        });
+      }
       pageLbl.textContent = curPage+' / '+numPages;
       zLbl.textContent    = Math.round(curScale*100)+'%';
       prevBtn.disabled    = curPage<=1;
@@ -2383,39 +2411,61 @@ function renderFile(item){
   } else if(vm==='preview-doc'&&item.fileData&&isPdf(item.name)){
     // ── PDF PREVIEW via PDF.js ──
     el.className='file-item preview-mode';
-    const w=item.w||380,h=item.h||500;
+    const w=item.w||380, h=item.h||500;
     el.style.width=w+'px';el.style.height=h+'px';
     const wrap=document.createElement('div');wrap.className='file-preview-wrap';
     wrap.style.cssText='width:100%;flex:1;overflow:hidden;min-height:0;position:relative;';
-    // Skalierung: PDF-Seite an Elementbreite anpassen (abzüglich Toolbar ~36px)
-    const pdfScale=Math.max(0.5, (w-8) / 595); // A4 = 595pt Breite bei 72dpi
-    buildPdfViewer(item.fileData, item.name, '100%', pdfScale).then(viewer=>{
+    // Initiale Skalierung — wird im onAspectKnown-Callback korrigiert sobald die echte
+    // PDF-Breite bekannt ist (statt der Annahme A4=595pt).
+    const initialScale = Math.max(0.5, (w-8) / 595);
+    // Callback feuert nach dem ersten Page-Load mit der echten Seitengröße.
+    // Wir korrigieren dann (a) Item-Höhe → richtiges Seitenverhältnis,
+    //                     (b) PDF-Scale → richtige Anzeige-Breite.
+    const onAspect = (pageInfo)=>{
+      const realPdfWidth = pageInfo.width;     // in PDF-Punkten
+      const realAspect   = pageInfo.aspect;    // height/width
+      // Korrekte Box-Höhe = sichtbare PDF-Breite × Aspect + Toolbar (ca. 30) + Footer (ca. 26)
+      const previewWidth = w - 8;              // wrap-padding
+      const desiredH = Math.round(previewWidth * realAspect) + 60;
+      // Nur ändern, wenn das Verhältnis stark abweicht (>5%) — sonst Re-Layout-Springen vermeiden
+      const currentRatio = h / w;
+      const desiredRatio = desiredH / w;
+      if(Math.abs(currentRatio - desiredRatio) > 0.05){
+        item.h = desiredH;
+        el.style.height = desiredH + 'px';
+        scheduleSave();
+        // PDF neu rendern mit korrekter Skalierung
+        const correctScale = Math.max(0.5, previewWidth / realPdfWidth);
+        wrap.innerHTML = '';
+        buildPdfViewer(item.fileData, item.name, '100%', correctScale).then(v=>{
+          wrap.appendChild(v);
+          wrap.appendChild(drawOverlay);
+        }).catch(()=>{});
+      }
+    };
+    buildPdfViewer(item.fileData, item.name, '100%', initialScale, onAspect).then(viewer=>{
       wrap.appendChild(viewer);
     }).catch(()=>{
       wrap.innerHTML='<div style="padding:12px;font-size:11px;font-family:var(--mono);color:var(--text-dim)">PDF kann nicht angezeigt werden</div>';
     });
-    // Zeichen-Overlay über PDF mit setPointerCapture
     const drawOverlay=document.createElement('div');
     drawOverlay.className='pdf-draw-overlay';
     drawOverlay.style.cssText='position:absolute;inset:0;z-index:10;pointer-events:none;touch-action:none;background:transparent;';
     if(DRAW_TOOLS.includes(S.tool)) drawOverlay.style.pointerEvents='auto';
     drawOverlay.addEventListener('pointerdown',ev=>{
       if(!DRAW_TOOLS.includes(S.tool)) return;
-      ev.preventDefault();
-      ev.stopPropagation();
+      ev.preventDefault(); ev.stopPropagation();
       try{ drawOverlay.setPointerCapture(ev.pointerId); }catch(_){}
       handleDrawStart(normEvent(ev));
     });
     drawOverlay.addEventListener('pointermove',ev=>{
       if(!isDrawing) return;
-      ev.preventDefault();
-      ev.stopPropagation();
+      ev.preventDefault(); ev.stopPropagation();
       handleDrawMove(normEvent(ev));
     });
     const _endOv=ev=>{
       if(!isDrawing) return;
-      ev.preventDefault();
-      ev.stopPropagation();
+      ev.preventDefault(); ev.stopPropagation();
       try{ drawOverlay.releasePointerCapture(ev.pointerId); }catch(_){}
       handleDrawEnd(normEvent(ev));
     };
@@ -2427,12 +2477,23 @@ function renderFile(item){
     meta.innerHTML=`<span style="font-size:12px;color:${color}">${icon}</span><span class="file-label" style="flex:1;text-align:left">${escHtml(item.name||'')}</span><button data-onclick="openViewer(${item.id})" style="border:none;background:transparent;color:var(--accent);cursor:pointer;font-size:10px;font-family:var(--mono)">⛶ Vollbild</button>`;
     el.appendChild(meta);
     const rh=document.createElement('div');rh.style.cssText='position:absolute;right:0;bottom:0;width:14px;height:14px;cursor:se-resize;z-index:2;';el.appendChild(rh);
-    // Nach Resize: PDF neu rendern mit neuer Breite
+    // Nach Resize: PDF neu rendern; Höhe an echtes Seitenverhältnis anpassen wenn bekannt
     makeResizable(el,item,rh,()=>{
       wrap.innerHTML='';
+      const reuseAspect = (info)=>{
+        // Höhe an neue Breite + echtes PDF-Verhältnis anpassen
+        const previewWidth = el.offsetWidth - 8;
+        const desiredH = Math.round(previewWidth * info.aspect) + 60;
+        if(Math.abs((item.h||0) - desiredH) > 4){
+          item.h = desiredH;
+          el.style.height = desiredH + 'px';
+        }
+      };
       const newScale=Math.max(0.5,(el.offsetWidth-8)/595);
-      buildPdfViewer(item.fileData, item.name, '100%', newScale).then(v=>wrap.appendChild(v)).catch(()=>{});
-      wrap.appendChild(drawOverlay);
+      buildPdfViewer(item.fileData, item.name, '100%', newScale, reuseAspect).then(v=>{
+        wrap.appendChild(v);
+        wrap.appendChild(drawOverlay);
+      }).catch(()=>{});
     });
     addFileBurger(el,item);
 
@@ -3585,7 +3646,7 @@ function _startItemTapOrDrag(e, el, folder, fi, rebuildWin){
   }, 500);
 
   let _lastEvT=0;
-  const DRAG_THRESHOLD = e.pointerType==='mouse' ? 10000 : 400; // Touch/Pen: 20px
+  const DRAG_THRESHOLD = e.pointerType==='mouse' ? 10000 : 400;
   const onMove=ev=>{
     if(ev.pointerId!==e.pointerId) return;
     const t=ev.timeStamp||Date.now();
@@ -4064,32 +4125,7 @@ function showCanvasCtxMenu(e){
     <div class="ctx-item" data-onclick="clearSelection()"><span class="ctx-icon">○</span>Auswahl aufheben</div>
     ${S.selectedIds.size>0?`<div class="ctx-item danger" data-onclick="clearSelected()"><span class="ctx-icon">🗑</span>Auswahl löschen</div>`:''}`;
 }
-canvasWrap.addEventListener('contextmenu',e=>{
-  // Prüfen, ob Rechtsklick auf einer SVG-Form landet (Pfeil, Linie, Kreis, Rechteck, Pen-Pfad)
-  if(S.tool==='select'){
-    const dlayers=$('draw-layers');
-    if(dlayers){
-      dlayers.style.pointerEvents='all';
-      dlayers.querySelectorAll('.layer-svg').forEach(s=>s.style.pointerEvents='all');
-      dlayers.querySelectorAll('.layer-svg > *:not(defs)').forEach(el=>el.style.pointerEvents='all');
-      const allHits=document.elementsFromPoint(e.clientX,e.clientY);
-      dlayers.style.pointerEvents='none';
-      dlayers.querySelectorAll('.layer-svg').forEach(s=>s.style.pointerEvents='');
-      dlayers.querySelectorAll('.layer-svg > *:not(defs)').forEach(el=>el.style.pointerEvents='');
-      const svgShape=allHits.find(el=>{
-        if(!el.closest('#draw-layers')) return false;
-        if(el.classList&&el.classList.contains('svg-resize-handle')) return false;
-        return /^(path|line|rect|ellipse|circle|polyline|polygon)$/i.test(el.tagName);
-      });
-      if(svgShape){
-        e.preventDefault();
-        showShapeCtxMenu(e, svgShape);
-        return;
-      }
-    }
-  }
-  if(isBg(e.target)){e.preventDefault();showCanvasCtxMenu(e);}
-});
+canvasWrap.addEventListener('contextmenu',e=>{if(isBg(e.target)){e.preventDefault();showCanvasCtxMenu(e);}});
 document.addEventListener('click',e=>{
   if(ctxMenu.contains(e.target)){
     const btn=e.target.closest('[data-action]');
@@ -4269,35 +4305,80 @@ function compressImage(dataUrl, maxSize, quality, callback){
   img.onerror = () => callback(dataUrl);
   img.src = dataUrl;
 }
-// Default compression settings (user-adjustable via settings)
-const IMG_MAX_PX = 900;    // max pixels on longest side
-const IMG_QUALITY = 0.65;  // JPEG quality — balance of quality/size
+// Default-Komprimierung — großzügige Defaults statt 900px/0.65
+const IMG_MAX_PX_DEFAULT = 2400;
+const IMG_QUALITY_DEFAULT = 0.92;
+const _savedImgMaxPx = +localStorage.getItem('bd_img_max_px');
+const _savedImgQuality = +localStorage.getItem('bd_img_quality');
+let IMG_MAX_PX = (_savedImgMaxPx > 0 ? _savedImgMaxPx : IMG_MAX_PX_DEFAULT);
+let IMG_QUALITY = (_savedImgQuality > 0 ? _savedImgQuality : IMG_QUALITY_DEFAULT);
+
+function _placeImageItem(src, fileName, idx){
+  const pos = centerPos(idx*40, idx*40);
+  const tmp = new Image();
+  tmp.onload = () => {
+    const aspect = tmp.naturalHeight / tmp.naturalWidth;
+    const w = Math.min(320, tmp.naturalWidth);
+    const h = Math.round(w * aspect);
+    const item = createItem('image', {src, name:fileName, x:pos.x-w/2, y:pos.y-h/2, w, h, aspect});
+    ensureVisible(item);
+  };
+  tmp.onerror = () => {
+    const item = createItem('image', {src, name:fileName, x:pos.x-100, y:pos.y-75, w:200, h:150});
+    ensureVisible(item);
+  };
+  tmp.src = src;
+}
 
 function handleImageUpload(event){
   Array.from(event.target.files).forEach((file,i)=>{
     const reader=new FileReader();
     reader.onload=ev=>{
       compressImage(ev.target.result, IMG_MAX_PX, IMG_QUALITY, compressed=>{
-        const pos=centerPos(i*40, i*40);
-        // Calculate display size from actual compressed dimensions
-        const tmp=new Image();
-        tmp.onload=()=>{
-          const aspect=tmp.naturalHeight/tmp.naturalWidth;
-          const w=Math.min(320, tmp.naturalWidth);
-          const h=Math.round(w*aspect);
-          const item=createItem('image',{src:compressed,name:file.name,x:pos.x-w/2,y:pos.y-h/2,w,h,aspect});
-          ensureVisible(item);
-        };
-        tmp.onerror=()=>{
-          const item=createItem('image',{src:compressed,name:file.name,x:pos.x-100,y:pos.y-75,w:200,h:150});
-          ensureVisible(item);
-        };
-        tmp.src=compressed;
+        _placeImageItem(compressed, file.name, i);
       });
     };
     reader.readAsDataURL(file);
   });
   event.target.value='';
+}
+
+function handleImageUploadOriginal(event){
+  Array.from(event.target.files).forEach((file,i)=>{
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      _placeImageItem(ev.target.result, file.name, i);
+    };
+    reader.readAsDataURL(file);
+  });
+  event.target.value='';
+}
+
+function openImageSettingsModal(){
+  openModal(`<div class="modal-title">🖼 Bild-Standardqualität</div>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:14px;line-height:1.5">
+      Diese Werte gelten für alle Bilder, die mit dem normalen Bild-Button hochgeladen werden.
+      Über den separaten Bild-Original-Button kannst du jederzeit eine ungekürzte Version laden.
+    </div>
+    <div class="modal-lbl">Maximale Kantenlänge (Pixel)</div>
+    <input class="modal-input" id="img-max-inp" type="number" min="500" max="8000" step="100" value="${IMG_MAX_PX}">
+    <div style="font-size:10px;color:var(--text-dimmer);margin:-6px 0 10px 0">Standard: 2400 px.</div>
+    <div class="modal-lbl">JPEG-Qualität (0.5 – 1.0)</div>
+    <input class="modal-input" id="img-q-inp" type="number" min="0.5" max="1.0" step="0.01" value="${IMG_QUALITY}">
+    <div style="font-size:10px;color:var(--text-dimmer);margin:-6px 0 16px 0">Standard: 0.92.</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="modal-btn" data-onclick="closeModal()">Abbrechen</button>
+      <button class="modal-btn primary" data-onclick="saveImageSettings()">Speichern</button>
+    </div>`);
+}
+function saveImageSettings(){
+  const m = +document.getElementById('img-max-inp').value;
+  const q = +document.getElementById('img-q-inp').value;
+  if(m >= 500 && m <= 8000) IMG_MAX_PX = m;
+  if(q >= 0.5 && q <= 1.0) IMG_QUALITY = q;
+  localStorage.setItem('bd_img_max_px', String(IMG_MAX_PX));
+  localStorage.setItem('bd_img_quality', String(IMG_QUALITY));
+  closeModal();
 }
 
 // ═══════════════════════════════════════════════
@@ -4632,7 +4713,40 @@ function renderLayerList(){
     const lockBtn=document.createElement('button');
     lockBtn.className='layer-icon-btn';lockBtn.title='Sperren';
     lockBtn.textContent=layer.locked?'🔒':'🔓';
-    lockBtn.addEventListener('click',e=>{e.stopPropagation();layer.locked=!layer.locked;renderLayerList();scheduleSave();});
+    lockBtn.addEventListener('click',e=>{
+      e.stopPropagation();
+      layer.locked=!layer.locked;
+      S.items.filter(it=>it.layerId===layer.id).forEach(it=>{
+        const el=$('item-'+it.id);
+        if(!el) return;
+        if(layer.locked){
+          el.style.pointerEvents='none';
+          el.querySelectorAll('button,a,textarea,input,select,video').forEach(c=>{c.style.pointerEvents='none';});
+        } else {
+          el.style.pointerEvents='';
+          el.querySelectorAll('button,a,textarea,input,select,video').forEach(c=>{c.style.pointerEvents='';});
+        }
+      });
+      const lsvg=document.getElementById('layer-svg-'+layer.id);
+      if(lsvg){
+        lsvg.querySelectorAll(':scope > *:not(defs)').forEach(sh=>{
+          if(layer.locked) sh.classList.add('layer-locked-shape');
+          else sh.classList.remove('layer-locked-shape');
+        });
+      }
+      if(layer.locked && S.selectedIds.size>0){
+        const toDeselect=[...S.selectedIds].filter(id=>{
+          const it=S.items.find(i=>i.id===id);
+          return it && it.layerId===layer.id;
+        });
+        toDeselect.forEach(id=>{
+          S.selectedIds.delete(id);
+          $('item-'+id)?.classList.remove('selected');
+        });
+      }
+      renderLayerList();
+      scheduleSave();
+    });
 
     const nameEl=document.createElement('span');
     nameEl.className='layer-name';nameEl.textContent=layer.name;
@@ -4804,37 +4918,14 @@ function applyLayerOrder(){
       }
     });
     const svg=document.getElementById('layer-svg-'+layer.id);
-    if(svg){
-      // Layer-SVG z-index: respektiert den Toggle "Striche über/unter Items" pro Ebene.
-      // Während aktiv gezeichnet wird → immer oben (99999), damit neue Striche sichtbar sind.
-      // Sonst: liegt er unter Items oder darüber, je nachdem was der User gewählt hat.
-      let targetZ;
-      if(drawingActive){
-        targetZ = '99999';
-      } else {
-        // layer._svgZ ist 800 (=über Items) oder 1 (=unter Items) per Toggle.
-        // Umrechnung in Item-Z-Bereich der Ebene:
-        //   "über Items" → (i+1)*1000 + 900 → liegt höher als alle Items der Ebene
-        //   "unter Items" → (i+1)*1000 - 500 → liegt unter allen Items der Ebene
-        //                   (aber noch über den Items der darunterliegenden Ebene)
-        const svgZ = (layer._svgZ==null||layer._svgZ>=800) ? 900 : -500;
-        targetZ = String((i+1)*1000 + svgZ);
-      }
-      if(svg.style.zIndex!==targetZ) svg.style.zIndex=targetZ;
-    }
+    if(svg&&svg.style.zIndex!=='99999') svg.style.zIndex='99999';
   });
   // draw-layers: nur DOM-Move wenn nötig (verhindert Reflow)
   const dl=$('draw-layers');
   const il=$('items-layer');
   const cvs=$('canvas');
   if(dl&&il&&cvs){
-    // Während des Zeichnens: Container immer oben. Sonst 'auto' damit die layer-svg
-    // ihre individuellen z-indices durchsetzen können.
-    if(drawingActive){
-      if(dl.style.zIndex!=='99998') dl.style.zIndex='99998';
-    } else {
-      if(dl.style.zIndex!=='auto') dl.style.zIndex='auto';
-    }
+    if(dl.style.zIndex!=='99998') dl.style.zIndex='99998';
     if(dl.style.pointerEvents!=='none') dl.style.pointerEvents='none';
     // Nur verschieben wenn draw-layers nicht bereits letztes Kind
     if(cvs.lastElementChild!==dl) cvs.appendChild(dl);
@@ -4874,80 +4965,6 @@ function moveItemToLayer(itemId,layerId){
   renderLayerList();
   scheduleSave();
 }
-
-// ── Rechtsklick-Menü für SVG-Formen (Pfeile, Linien, Kreise, Rechtecke, Pen-Pfade) ──
-// Ermöglicht "Auf Ebene verschieben" — damit Formen hinter oder vor Items gelegt
-// werden können, indem man die Ebenen-Reihenfolge ausnutzt.
-let _shapeCtxTarget=null; // Shape-Element für das Menü
-function showShapeCtxMenu(e, shapeEl){
-  _shapeCtxTarget = shapeEl;
-  ctxMenu.style.display='block';
-  ctxMenu.style.left=e.clientX+'px';
-  ctxMenu.style.top=e.clientY+'px';
-  // Aktuelle Ebene der Shape ermitteln
-  const parentSvg=shapeEl.closest('svg.layer-svg');
-  const currentLayerId = parentSvg ? +parentSvg.id.replace('layer-svg-','') : (getActiveLayer()?.id);
-  let html = '<div style="font-size:10px;font-family:var(--mono);color:var(--text-dimmer);padding:4px 12px 2px">Form auf Ebene verschieben:</div>';
-  html += S.layers.map(l =>
-    `<div class="ctx-item${l.id===currentLayerId?' ctx-item-active':''}" data-shape-action="movelayer" data-layer-id="${l.id}">` +
-    `<span class="ctx-icon">${l.id===currentLayerId?'✓':'⧉'}</span>${l.name}</div>`
-  ).join('');
-  html += '<div class="ctx-sep"></div>';
-  html += '<div class="ctx-item danger" data-shape-action="delete"><span class="ctx-icon">🗑</span>Löschen</div>';
-  ctxMenu.innerHTML = html;
-}
-
-// Verschiebt eine SVG-Form in das layer-svg einer anderen Ebene.
-// Die Form behält alle Attribute (Koordinaten, Stroke, etc.). Marker-end (Pfeilspitze)
-// wird bei Bedarf in der Zielebene neu erzeugt.
-function moveShapeToLayer(shapeEl, targetLayerId){
-  if(!shapeEl) return;
-  const targetSvg = ensureLayerSvg(targetLayerId);
-  if(!targetSvg) return;
-  // Falls die Shape einen arrow marker benutzt, sicherstellen, dass er im Ziel-SVG existiert
-  const me = shapeEl.getAttribute('marker-end');
-  if(me){
-    const m = me.match(/url\(#ah-([^)]+)\)/);
-    if(m){
-      const color = '#'+m[1];
-      const newId = ensureArrowheadInSvg(targetSvg, color);
-      shapeEl.setAttribute('marker-end', `url(#${newId})`);
-    }
-  }
-  // Shape in Ziel-SVG hängen (ans Ende → oben innerhalb der Ebene)
-  targetSvg.appendChild(shapeEl);
-  // data-lid für Persistenz aktualisieren
-  shapeEl.setAttribute('data-lid', String(targetLayerId));
-  // Sichtbarkeit/Lock anhand der Ziel-Ebene setzen
-  const targetLayer = S.layers.find(l => l.id === targetLayerId);
-  if(targetLayer && !targetLayer.visible) shapeEl.style.display='none';
-  else shapeEl.style.display='';
-  applyLayerOrder();
-  scheduleRenderLayerList?.();
-  scheduleSave();
-}
-
-// Click-Handler für Shape-Kontextmenü-Einträge
-document.addEventListener('click', function(e){
-  const btn = e.target.closest('[data-shape-action]');
-  if(!btn || !ctxMenu.contains(btn)) return;
-  e.stopPropagation();
-  const action = btn.dataset.shapeAction;
-  const shape = _shapeCtxTarget;
-  ctxMenu.style.display='none';
-  if(!shape) return;
-  if(action === 'movelayer'){
-    const lid = +btn.dataset.layerId;
-    moveShapeToLayer(shape, lid);
-  } else if(action === 'delete'){
-    // Aus S.drawings entfernen + aus DOM
-    const idx = S.drawings.indexOf(shape);
-    if(idx >= 0) S.drawings.splice(idx, 1);
-    shape.remove();
-    scheduleSave();
-  }
-  _shapeCtxTarget = null;
-}, {capture: false});
 
 // ═══════════════════════════════════════════════
 //  MODAL
@@ -5311,7 +5328,7 @@ function saveStorage(store){
     return true;
   } catch(e){
     // localStorage full — show user warning
-    console.warn('LPD-Vorarlberg: localStorage voll', e);
+    console.warn('BoardDesk: localStorage voll', e);
     const banner = document.getElementById('save-error-banner') || (() => {
       const b = document.createElement('div');
       b.id = 'save-error-banner';
@@ -5551,7 +5568,7 @@ function exportAllBoards(){
     const a=document.createElement('a');
     document.body.appendChild(a);
     a.style.cssText='position:fixed;top:-100px;left:-100px;';
-    a.download='LPD-Vorarlberg_Alle_Boards_'+new Date().toISOString().slice(0,10)+'.json';
+    a.download='BoardDesk_Alle_Boards_'+new Date().toISOString().slice(0,10)+'.json';
     a.href=url;a.click();
     toast.innerHTML='<span style="color:var(--accent)">✓</span> Exportiert!';
     setTimeout(()=>{
@@ -5625,6 +5642,68 @@ function showBoardSizeInfo(){
   `);
 }
 
+// ── .board-Format (ZIP) — nutzt window.BoardFile aus boarddesk-tauri-bridge.js ──
+// Im Tauri-Build: nativer Save/Open-Dialog. Im Browser: Download / File-Input-Fallback.
+async function saveBoardAsFile(){
+  if(typeof window.BoardFile === 'undefined'){
+    showInfo('Speicher-Bridge nicht verfügbar. Bitte als .json exportieren.');
+    return;
+  }
+  const _toast=document.createElement('div');
+  _toast.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);'
+    +'background:var(--surface);border:1px solid var(--accent);border-radius:14px;'
+    +'padding:24px 32px;font-size:13px;font-family:var(--mono);z-index:99999;'
+    +'min-width:280px;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.7);';
+  _toast.innerHTML='<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">💾 Board speichern</div>'
+    +'<div style="color:var(--text-dim)">Daten werden vorbereitet…</div>';
+  document.body.appendChild(_toast);
+  try{
+    // Bilder/Dateien aus IndexedDB rehydrieren, damit sie in .board reinkommen
+    const board = captureBoard();
+    const full = await restoreBoardDataAsync(JSON.parse(JSON.stringify(board)));
+    const name = (full.name || 'board');
+    // Immer mit Save-As-Dialog speichern (true), damit der User den Pfad wählt
+    const result = await window.BoardFile.save(full, name, true);
+    _toast.innerHTML='<div style="color:#2ecc71;font-size:15px;font-weight:700">✓ Gespeichert</div>'
+      +'<div style="color:var(--text-dim);font-size:11px;margin-top:6px">'+(typeof result==='string'?result:'')+'</div>';
+    setTimeout(()=>_toast.remove(), 2500);
+  }catch(err){
+    _toast.remove();
+    if(err && (err.message||'').includes('cancel')) return;
+    showInfo('Speichern fehlgeschlagen: '+(err?.message||err));
+  }
+}
+
+async function openBoardFromFile(){
+  if(typeof window.BoardFile === 'undefined'){
+    // Fallback: regulären Import-Dialog öffnen
+    window._openFileInput('import-input','.json,.board',true,importBoard);
+    return;
+  }
+  try{
+    const result = await window.BoardFile.open();
+    if(!result) return; // User hat abgebrochen
+    const boardData = result.board || result;
+    if(!boardData || !boardData.name){
+      showInfo('Datei enthält kein gültiges Board.');
+      return;
+    }
+    // Als neues Board in den Store eintragen + aktiv setzen
+    const store = loadStorage() || {boards:[], activeId:null};
+    const id = 'board_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
+    const imported = {...boardData, id, savedAt: Date.now()};
+    store.boards.push(imported);
+    store.activeId = id;
+    saveStorage(store);
+    restoreBoard(imported);
+    renderBoardList(store);
+    showInfo('✓ Board geladen: '+boardData.name);
+  }catch(err){
+    if(err && (err.message||'').includes('cancel')) return;
+    showInfo('Öffnen fehlgeschlagen: '+(err?.message||err));
+  }
+}
+
 function exportBoard(){
   const board = captureBoard();
   // Deep clone so we can safely rehydrate idb: refs without mutating S.items
@@ -5672,7 +5751,7 @@ function exportBoard(){
       _setProgress(75,'Speicherort wählen…');
       window.showSaveFilePicker({
         suggestedName: safeName+'.json',
-        types:[{description:'LPD-Vorarlberg Board',accept:{'application/json':['.json']}}]
+        types:[{description:'BoardDesk Board',accept:{'application/json':['.json']}}]
       }).then(fh=>{ _setProgress(85,'Datei wird geschrieben…'); return fh.createWritable(); })
         .then(w=>w.write(blob).then(()=>w))
         .then(w=>w.close())
@@ -5729,40 +5808,90 @@ function importBoard(event){
   let pending=files.length;
   const store=loadStorage()||{boards:[],activeId:null};
   let lastId=null;
-  files.forEach(file=>{
-    const reader=new FileReader();
-    reader.onload=e=>{
-      try{
-        const data=JSON.parse(e.target.result);
-        // Full store export (has .boards array)?
-        if(data.boards&&Array.isArray(data.boards)){
-          data.boards.forEach(b=>{
-            const id='board_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
-            const imported={...b,id,savedAt:Date.now()};
-            store.boards.push(imported);
-            lastId=id;
-          });
-        } else if(data.name&&Array.isArray(data.items)){
-          // Single board JSON
+
+  // Helper: nimmt einen Text-String (JSON), versucht zu parsen + ins Store zu legen
+  const _ingestJson = (jsonText, fileName)=>{
+    try{
+      const data=JSON.parse(jsonText);
+      if(data.boards&&Array.isArray(data.boards)){
+        data.boards.forEach(b=>{
           const id='board_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
-          const imported={...data,id,savedAt:Date.now()};
+          const imported={...b,id,savedAt:Date.now()};
           store.boards.push(imported);
           lastId=id;
-        } else {
-          throw new Error('Ungültiges Format');
-        }
-      } catch(err){showInfo('Fehler in "'+file.name+'": '+err.message);}
-      pending--;
-      if(pending===0&&lastId){
-        store.activeId=lastId;
-        saveStorage(store);
-        const active=store.boards.find(b=>b.id===lastId);
-        if(active) restoreBoard(active);
-        renderBoardList(store);
-        showInfo('Import erfolgreich! '+files.length+' Datei'+(files.length>1?'en':'')+' importiert.');
+        });
+      } else if(data.name&&Array.isArray(data.items)){
+        const id='board_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
+        const imported={...data,id,savedAt:Date.now()};
+        store.boards.push(imported);
+        lastId=id;
+      } else {
+        throw new Error('Ungültiges Format');
       }
-    };
-    reader.readAsText(file);
+    } catch(err){
+      showInfo('Fehler in "'+fileName+'": '+err.message);
+    }
+  };
+
+  const _onDone = ()=>{
+    pending--;
+    if(pending===0&&lastId){
+      store.activeId=lastId;
+      saveStorage(store);
+      const active=store.boards.find(b=>b.id===lastId);
+      if(active) restoreBoard(active);
+      renderBoardList(store);
+      showInfo('Import erfolgreich! '+files.length+' Datei'+(files.length>1?'en':'')+' importiert.');
+    } else if(pending===0){
+      showInfo('Import abgeschlossen — keine validen Boards gefunden.');
+    }
+  };
+
+  files.forEach(file=>{
+    const isBoardFile = /\.board$/i.test(file.name);
+    if(isBoardFile){
+      // .board-Format: könnte ZIP-Container (JSZip) oder einfach JSON mit anderer Endung sein
+      const reader=new FileReader();
+      reader.onload=async e=>{
+        const arrayBuf = e.target.result;
+        // Versuch 1: als ZIP entpacken (JSZip ist global verfügbar)
+        try{
+          if(typeof JSZip !== 'undefined'){
+            const zip = await JSZip.loadAsync(arrayBuf);
+            // Suche nach board.json oder erstem .json darin
+            let entryName = null;
+            zip.forEach((path, entry)=>{
+              if(!entry.dir && /\.json$/i.test(path) && !entryName) entryName = path;
+            });
+            if(entryName){
+              const text = await zip.file(entryName).async('string');
+              _ingestJson(text, file.name);
+              _onDone();
+              return;
+            }
+          }
+        } catch(_){
+          // Kein gültiges ZIP — fallback auf Text-Lesen
+        }
+        // Versuch 2: als reiner JSON-Text lesen (manche .board sind nur umbenannt)
+        try{
+          const text = new TextDecoder('utf-8').decode(arrayBuf);
+          _ingestJson(text, file.name);
+        } catch(err){
+          showInfo('Konnte "'+file.name+'" nicht lesen: '+err.message);
+        }
+        _onDone();
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      // Standard .json-Datei als Text lesen
+      const reader=new FileReader();
+      reader.onload=e=>{
+        _ingestJson(e.target.result, file.name);
+        _onDone();
+      };
+      reader.readAsText(file);
+    }
   });
   event.target.value='';
 }
@@ -5878,10 +6007,10 @@ setTimeout(cleanupIdbOrphans, 5000);
 })();
 </script>
 
-<!-- ── LPD-Vorarlberg Tauri-Integration ─────────────────────────────────────
+<!-- ── BoardDesk Tauri-Integration ─────────────────────────────────────────
      JSZip: ZIP-Bibliothek für das .board-Format
      boarddesk-tauri-bridge.js: Datei-I/O + queryLocalFonts-Polyfill
-     Muss NACH dem Hauptskript eingebunden werden.
+     Muss NACH dem BoardDesk-Hauptskript eingebunden werden.
 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="boarddesk-tauri-bridge.js">
