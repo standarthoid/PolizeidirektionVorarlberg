@@ -589,14 +589,8 @@ window._pdfjsReady = (function(){
 
 <!-- HEADER -->
 <div id="header">
-<<<<<<< HEAD
   <button class="hdr-btn" id="boards-btn" data-onclick="toggleBoardPanel()" style="font-weight:600;padding:5px 10px;gap:5px;display:flex;align-items:center;"><span id="boards-btn-label">Boards</span></button>
   <div id="board-name-display" data-onclick="startBoardRename()" title="Klicken zum Bearbeiten" style="display:none;">Mein Board</div>
-=======
-  <button class="hdr-btn" id="boards-btn" data-onclick="toggleBoardPanel()" style="font-weight:600;padding:5px 10px;gap:5px;display:flex;align-items:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> <span id="boards-btn-label">Boards</span></button>
-  <div style="width:1px;height:22px;background:var(--border);flex-shrink:0"></div>
-  <div id="board-name-display" data-onclick="startBoardRename()" title="Klicken zum Bearbeiten">Mein Board</div>
->>>>>>> 2f29acc95ca1675d24c7d0c263962d5bda27d9f7
   <input id="board-name-input" onblur="commitBoardRename()" onkeydown="if(event.key==='Enter')commitBoardRename();event.stopPropagation();">
   <div class="hdr-space"></div>
   <label class="hdr-btn upload-only" data-onclick="window._openFileInput('bg-upload-input','image/*',false,handleBgUpload)" title="Hintergrundbild hochladen" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><polyline points="3 18 9 13 14 17 21 11 21 20"/></svg> Hintergrundbild</label>
@@ -690,7 +684,12 @@ window._pdfjsReady = (function(){
   <div class="side-sep"></div>
   <button class="side-btn" id="toolbar-compact-btn" data-onclick="toggleCompactToolbar()" title="Werkzeugleiste kompakt links">⊟</button>
   <button class="side-btn" id="toolbar-toggle-btn" data-onclick="toggleToolbar()" title="Werkzeugleiste ein-/ausblenden">▾</button>
+  <div class="side-sep"></div>
+  <button class="side-btn" id="board-lock-btn" data-onclick="toggleBoardLock()" title="Board sperren — keine Verschiebungen mehr möglich">🔓</button>
 </div>
+
+<!-- Board-Lock-Overlay: blockiert alle Klicks/Touches auf dem Canvas wenn aktiv -->
+<div id="board-lock-overlay" style="display:none;position:fixed;left:0;top:var(--header-h);right:0;bottom:0;z-index:9500;cursor:not-allowed;pointer-events:auto;background:transparent;"></div>
 
 <!-- ZOOM -->
 <div id="mini-ctrl">
@@ -712,13 +711,13 @@ window._pdfjsReady = (function(){
 
 <!-- FILE VIEWER -->
 <div id="viewer-overlay" style="display:none;position:fixed;inset:0;z-index:9000;background:#000;flex-direction:column;">
-  <div id="viewer-header" style="position:absolute;top:0;left:0;right:0;height:60px;display:flex;align-items:center;padding:0 20px;gap:12px;background:rgba(0,0,0,.8);z-index:10;">
-    <button id="viewer-prev" data-onclick="if(window._viewerShow)_viewerShow(-1)" style="background:rgba(255,255,255,.1);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 20px;cursor:pointer;font-size:22px;min-width:60px;min-height:44px;">‹</button>
-    <span id="viewer-title" style="flex:1;text-align:center;font-size:14px;font-family:var(--mono);color:var(--text);">—</span>
-    <button id="viewer-next" data-onclick="if(window._viewerShow)_viewerShow(1)" style="background:rgba(255,255,255,.1);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 20px;cursor:pointer;font-size:22px;min-width:60px;min-height:44px;">›</button>
-    <button id="viewer-close" data-onclick="closeViewer()" style="background:rgba(255,80,80,.15);border:2px solid rgba(255,80,80,.4);color:#ff6060;cursor:pointer;font-size:20px;border-radius:10px;padding:8px 18px;min-width:60px;min-height:44px;margin-left:8px;">✕</button>
+  <div id="viewer-header" style="position:absolute;top:0;left:0;right:0;height:48px;display:flex;align-items:center;padding:0 16px;gap:10px;background:linear-gradient(to bottom,rgba(0,0,0,.7) 0%,rgba(0,0,0,.4) 60%,rgba(0,0,0,0) 100%);z-index:10;pointer-events:none;">
+    <button id="viewer-prev" data-onclick="if(window._viewerShow)_viewerShow(-1)" style="background:rgba(20,20,20,.85);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 16px;cursor:pointer;font-size:18px;min-width:48px;min-height:36px;pointer-events:auto;backdrop-filter:blur(8px);">‹</button>
+    <span id="viewer-title" style="flex:1;text-align:center;font-size:13px;font-family:var(--mono);color:var(--text);text-shadow:0 1px 2px rgba(0,0,0,.8);pointer-events:none;">—</span>
+    <button id="viewer-next" data-onclick="if(window._viewerShow)_viewerShow(1)" style="background:rgba(20,20,20,.85);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 16px;cursor:pointer;font-size:18px;min-width:48px;min-height:36px;pointer-events:auto;backdrop-filter:blur(8px);">›</button>
+    <button id="viewer-close" data-onclick="closeViewer()" style="background:rgba(255,80,80,.2);border:1px solid rgba(255,80,80,.5);color:#ff6060;cursor:pointer;font-size:16px;border-radius:8px;padding:6px 14px;min-width:48px;min-height:36px;margin-left:6px;pointer-events:auto;backdrop-filter:blur(8px);">✕</button>
   </div>
-  <div id="viewer-body" style="position:absolute;inset:60px 0 0 0;overflow:auto;display:flex;align-items:center;justify-content:center;"><div id="viewer-resize-handle" style="position:fixed;right:8px;bottom:8px;width:32px;height:32px;cursor:se-resize;background:var(--accent);border-radius:8px;opacity:0.7;z-index:9100;display:flex;align-items:center;justify-content:center;font-size:16px;color:#000;user-select:none;" title="Größe ändern">⇲</div></div>
+  <div id="viewer-body" style="position:absolute;inset:0;overflow:auto;display:flex;align-items:center;justify-content:center;padding-top:56px;box-sizing:border-box;"><div id="viewer-resize-handle" style="position:fixed;right:8px;bottom:8px;width:32px;height:32px;cursor:se-resize;background:var(--accent);border-radius:8px;opacity:0.7;z-index:9100;display:flex;align-items:center;justify-content:center;font-size:16px;color:#000;user-select:none;" title="Größe ändern">⇲</div></div>
 </div>
 
 <!-- PRESENTATION HINT -->
@@ -809,6 +808,28 @@ function zoomBy(f,cx,cy){
   const ratio=nz/S.zoom;
   S.panX=cx-(cx-S.panX)*ratio; S.panY=cy-(cy-S.panY)*ratio; S.zoom=nz;
   applyTransform();
+}
+function toggleBoardLock(){
+  const ov = $('board-lock-overlay');
+  const btn = $('board-lock-btn');
+  if(!ov || !btn) return;
+  const wasLocked = ov.style.display !== 'none';
+  if(wasLocked){
+    ov.style.display = 'none';
+    btn.textContent = '🔓';
+    btn.title = 'Board sperren — keine Verschiebungen mehr möglich';
+    btn.classList.remove('active');
+  } else {
+    ov.style.display = 'block';
+    btn.textContent = '🔒';
+    btn.title = 'Board entsperren';
+    btn.classList.add('active');
+    // Side-Panel und Header über dem Overlay halten — damit User den Lock wieder lösen kann
+    const sp = $('side-panel');
+    const hd = $('header');
+    if(sp){ sp.style.zIndex = '9501'; }
+    if(hd){ hd.style.zIndex = '9501'; }
+  }
 }
 function toggleToolbar(){
   const tb=$('toolbar');
@@ -1818,8 +1839,12 @@ function doErase(e){if(isLayerLocked(getActiveLayer()?.id))return;
   });
   if(shape){
     const i=S.drawings.indexOf(shape);
+    // Undo-Snapshot vor der Löschung — Parent + Nachbar merken um Wiedereinfügung an gleicher Stelle zu erlauben
+    const parent = shape.parentNode;
+    const nextSibling = shape.nextSibling;
     if(i!==-1) S.drawings.splice(i,1);
     shape.remove();
+    pushUndo({type:'drawing-erase', el:shape, parent, nextSibling, originalIndex:i});
     renderLayerList();
   }
 }
@@ -1929,10 +1954,18 @@ function placeText(e){
 
 // undoStroke() ist jetzt oben als Undo-Stack definiert
 function clearDrawings(){
+  // Snapshot aller Strichelemente mit ihrer DOM-Position für Undo
+  const snapshot = [];
+  S.drawings.forEach(el=>{
+    if(el && el.parentNode){
+      snapshot.push({el, parent:el.parentNode, nextSibling:el.nextSibling});
+    }
+  });
+  if(snapshot.length > 0){
+    pushUndo({type:'drawings-clear', snapshot});
+  }
   S.drawings=[];
-  // Clear legacy draw-layer
   [...drawLayer.children].filter(c=>c.tagName!=='defs').forEach(c=>c.remove());
-  // Clear all per-layer SVGs
   document.querySelectorAll('.layer-svg').forEach(svg=>{
     [...svg.children].filter(c=>c.tagName!=='defs').forEach(c=>c.remove());
   });
@@ -2025,6 +2058,37 @@ function undoStroke(){
       if(el && el.parentNode) el.remove();
       const idx = S.drawings.indexOf(el);
       if(idx !== -1) S.drawings.splice(idx,1);
+      break;
+    }
+    case 'drawing-erase': {
+      // Radierten SVG-Strich wieder einfügen
+      const el = entry.el;
+      if(entry.parent && el){
+        if(entry.nextSibling && entry.nextSibling.parentNode===entry.parent){
+          entry.parent.insertBefore(el, entry.nextSibling);
+        } else {
+          entry.parent.appendChild(el);
+        }
+        const i = entry.originalIndex;
+        if(typeof i === 'number' && i >= 0 && i <= S.drawings.length){
+          S.drawings.splice(i, 0, el);
+        } else {
+          S.drawings.push(el);
+        }
+      }
+      break;
+    }
+    case 'drawings-clear': {
+      // Alle gemeinsam gelöschten Striche wiederherstellen
+      entry.snapshot.forEach(snap=>{
+        if(!snap.parent) return;
+        if(snap.nextSibling && snap.nextSibling.parentNode===snap.parent){
+          snap.parent.insertBefore(snap.el, snap.nextSibling);
+        } else {
+          snap.parent.appendChild(snap.el);
+        }
+        S.drawings.push(snap.el);
+      });
       break;
     }
     case 'item-create': {
