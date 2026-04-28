@@ -586,8 +586,24 @@ window._pdfjsReady = (function(){
     if(!_pdStart || _pdStart.id !== e.pointerId) return;
     var dx = Math.abs(e.clientX - _pdStart.x);
     var dy = Math.abs(e.clientY - _pdStart.y);
-    if(dx > 14 || dy > 14) return; // Drag/Wischen → kein Tap
+    // Großzügiger Schwellwert für Samsung Flip Touchscreens (große Finger,
+    // Touchpoint wackelt leicht). 28px statt 14px verhindert, dass kleine
+    // Hand-Wackler einen Tap als Drag fehlinterpretieren.
+    if(dx > 28 || dy > 28) return;
     // NUR setzen wenn Handler gefunden → Canvas-Taps blockieren keine Buttons mehr
+    var found = _runHandlers(e.target);
+    if(found) _touchFired = true;
+  }, {capture:false});
+
+  // Samsung Flip / Windows WebView2: pointercancel ist häufig, wenn das System
+  // einen kleinen Wackler als Scroll interpretiert. Wir behandeln es wie pointerup,
+  // damit Button-Taps trotzdem ankommen.
+  document.addEventListener('pointercancel', function(e){
+    if(e.pointerType === 'mouse') return;
+    if(!_pdStart || _pdStart.id !== e.pointerId) return;
+    var dx = Math.abs(e.clientX - _pdStart.x);
+    var dy = Math.abs(e.clientY - _pdStart.y);
+    if(dx > 28 || dy > 28) return;
     var found = _runHandlers(e.target);
     if(found) _touchFired = true;
   }, {capture:false});
@@ -1199,9 +1215,10 @@ function _onCanvasPointerDown(e){
     if(S.tool==='select' && S.selectedIds.size>0) clearSelection();
   }
 
-  // Middle button or pan tool = pan; touch on empty canvas in select mode = pan
-  const isTouchOnEmptyCanvas = ne.pointerType==='touch' && S.tool==='select' && !ne.target.closest('.item');
-  if(ne.button===1||(ne.button===0&&S.tool==='pan')||isTouchOnEmptyCanvas){
+  // Mittlere Maustaste oder Pan-Tool = pan. KEIN Auto-Pan auf Touch im Auswahlmodus,
+  // sonst verschiebt sich auf dem Touchscreen alles versehentlich. User muss das
+  // Hand-Werkzeug bewusst auswählen, um zu pannen.
+  if(ne.button===1||(ne.button===0&&S.tool==='pan')){
     isPanning=true;panStart={x:ne.clientX-S.panX,y:ne.clientY-S.panY};
     canvasWrap.style.cursor='grabbing';e.preventDefault();return;
   }
