@@ -790,6 +790,8 @@ window._pdfjsReady = (function(){
   <div id="map-canvas-wrap" style="position:absolute;inset:0;overflow:hidden;cursor:grab;touch-action:none;">
     <div id="map-transform" style="position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;">
       <img id="map-image" alt="Karte" style="display:block;max-width:none;user-select:none;-webkit-user-drag:none;pointer-events:none;">
+      <!-- MBTiles-Container: Tiles werden hier per JS hinzugefügt. Liegt ÜBER dem PNG -->
+      <div id="map-tiles" style="position:absolute;left:0;top:0;display:none;"></div>
       <svg id="map-draw-svg" xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;">
         <defs></defs>
       </svg>
@@ -800,19 +802,26 @@ window._pdfjsReady = (function(){
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6 L9 4 L15 6 L21 4 L21 18 L15 20 L9 18 L3 20 Z"/><line x1="9" y1="4" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="20"/></svg>
       </div>
       <div style="margin-bottom:18px;">Keine Karte geladen</div>
-      <button class="bp-btn primary" data-onclick="window._openFileInput('map-upload-input','image/*',false,handleMapUpload)" style="cursor:pointer;">Kartenbild hochladen</button>
-      <div style="font-size:10px;color:var(--text-dimmer);margin-top:14px;line-height:1.5;max-width:300px;">
-        Empfohlen: hochauflösendes PNG oder JPEG.<br>
-        Beim Reinzoomen zeigt sich die volle Detailtiefe<br>der Karte.
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <button class="bp-btn primary" data-onclick="window._openFileInput('map-upload-input','image/*',false,handleMapUpload)" style="cursor:pointer;">PNG/JPEG hochladen</button>
+        <button class="bp-btn" data-onclick="loadMBTilesMap()" style="cursor:pointer;">MBTiles-Karte öffnen</button>
+      </div>
+      <div style="font-size:10px;color:var(--text-dimmer);margin-top:14px;line-height:1.5;max-width:340px;">
+        <strong>PNG/JPEG</strong>: ein einzelnes hochauflösendes Bild, begrenzte Zoom-Tiefe.<br>
+        <strong>MBTiles</strong>: vorgekachelte Karte aus QGIS, beliebig tiefes Zoomen.
       </div>
     </div>
   </div>
 
   <!-- Toolbar oben — minimal wie im Präsentationsmodus -->
   <div id="map-mode-toolbar" style="position:absolute;top:14px;right:14px;display:flex;gap:8px;z-index:10;">
-    <button class="hdr-btn" data-onclick="window._openFileInput('map-upload-input','image/*',false,handleMapUpload)" title="Andere Karte laden" style="display:inline-flex;align-items:center;gap:5px;">
+    <button class="hdr-btn" data-onclick="window._openFileInput('map-upload-input','image/*',false,handleMapUpload)" title="PNG/JPEG-Karte laden" style="display:inline-flex;align-items:center;gap:5px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      Karte laden
+      PNG
+    </button>
+    <button class="hdr-btn" data-onclick="loadMBTilesMap()" title="MBTiles-Karte öffnen (vorgekachelte Karte aus QGIS)" style="display:inline-flex;align-items:center;gap:5px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      MBTiles
     </button>
     <button class="hdr-btn" data-onclick="clearMapDrawings()" title="Alle Zeichnungen auf der Karte löschen" style="display:inline-flex;align-items:center;gap:5px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
@@ -4679,7 +4688,175 @@ function commitBoardRename(){const d=$('board-name-display'),i=$('board-name-inp
 // ── KARTEN-MODUS ──
 // Vollbild-Modus für Kartenmaterial mit Zeichenfunktion. Eigener Zoom/Pan-Zustand
 // (M.zoom, M.panX, M.panY) und eigener Drawings-Speicher (S.mapDrawings als HTML-String).
-const M = { zoom:1, panX:0, panY:0, isPanning:false, isDrawing:false, drawEl:null, panStart:null };
+const M = {
+  zoom:1, panX:0, panY:0,
+  isPanning:false, isDrawing:false, drawEl:null, panStart:null,
+  // MBTiles-spezifisch
+  source:'png',          // 'png' | 'mbtiles'
+  mbMeta:null,           // Metadaten der aktuellen MBTiles-Karte
+  mbTileSize:256,        // Standard-Kachelgröße
+  mbWorldPx:256,         // Welt-Größe in Pixel bei zoom=0 (wird beim Laden gesetzt)
+  mbCurrentZ:0,          // aktuell gerenderte Tile-Zoom-Stufe
+  mbTilesShown:new Map(),// "z/x/y" → DOM-Element
+};
+
+// ── MBTiles-Modus für Karten ─────────────────────────────────────────────
+// Lädt eine vorgekachelte MBTiles-Karte via Bridge (Rust-Backend).
+// Im Gegensatz zum PNG-Modus werden Tiles dynamisch nach Sichtbarkeit nachgeladen.
+async function loadMBTilesMap(){
+  if(typeof window.MBTiles === 'undefined' || !window.MBTiles.isTauri){
+    alert('MBTiles-Funktion ist nur in der Desktop-App verfügbar.\nIm Browser-Modus bitte PNG verwenden.');
+    return;
+  }
+  try{
+    // Falls bereits eine MBTiles geöffnet ist, fragen ob ersetzen oder die aktuelle nutzen
+    if(window.MBTiles.currentPath){
+      const reuse = confirm('Eine MBTiles ist bereits geöffnet:\n'+window.MBTiles.currentPath+
+        '\n\n[OK] um sie zu nutzen, [Abbrechen] um eine andere zu wählen.');
+      if(!reuse){
+        await window.MBTiles.openDialog();
+      }
+    } else {
+      await window.MBTiles.openDialog();
+    }
+    const meta = await window.MBTiles.metadata();
+    M.source = 'mbtiles';
+    M.mbMeta = meta;
+    // Welt-Größe bei zoom=0 = tileSize (typisch 256). Bei zoom=N: tileSize*2^N
+    // Wir nutzen die maximale Zoom-Stufe der MBTiles als "Bild-Auflösung" für unsere Pan/Zoom-Logik
+    const maxZ = meta.maxzoom ?? 14;
+    M.mbWorldPx = M.mbTileSize * Math.pow(2, maxZ);
+    // PNG-Bild ausblenden, Tile-Container einblenden
+    const img = $('map-image');      if(img) img.style.display = 'none';
+    const tiles = $('map-tiles');    if(tiles){
+      tiles.style.display = 'block';
+      tiles.style.width = M.mbWorldPx + 'px';
+      tiles.style.height = M.mbWorldPx + 'px';
+      [...tiles.children].forEach(c => c.remove());
+      M.mbTilesShown.clear();
+    }
+    const hint = $('map-empty-hint'); if(hint) hint.style.display = 'none';
+    const svg = $('map-draw-svg');
+    if(svg){
+      svg.setAttribute('width', M.mbWorldPx);
+      svg.setAttribute('height', M.mbWorldPx);
+      svg.setAttribute('viewBox', `0 0 ${M.mbWorldPx} ${M.mbWorldPx}`);
+    }
+    // In MBTiles-Modus speichern wir KEINE Karte in S.mapImage — der Pfad ist in localStorage
+    S.mapSource = 'mbtiles';
+    scheduleSave();
+    resetMapView();
+    renderMapTiles();
+  }catch(err){
+    if(err && (err.message||'').toLowerCase().includes('abgebrochen')) return;
+    alert('MBTiles konnte nicht geöffnet werden:\n'+(err?.message||err));
+  }
+}
+
+// Bestimmt die optimale Zoom-Stufe für die aktuelle Welt-Skalierung.
+// Wenn M.zoom = 1 bedeutet das, dass 1 MBTiles-Pixel = 1 Bildschirm-Pixel.
+function _mbBestZoomLevel(){
+  if(!M.mbMeta) return 0;
+  const minZ = M.mbMeta.minzoom ?? 0;
+  const maxZ = M.mbMeta.maxzoom ?? 14;
+  // bei maxZ haben wir die "Originalauflösung". Wenn M.zoom < 1, brauchen wir weniger Detail.
+  // Formel: z = maxZ + log2(M.zoom)
+  let z = Math.round(maxZ + Math.log2(M.zoom));
+  if(z < minZ) z = minZ;
+  if(z > maxZ) z = maxZ;
+  return z;
+}
+
+// Rendert sichtbare Tiles für die aktuelle Ansicht
+function renderMapTiles(){
+  if(M.source !== 'mbtiles' || !M.mbMeta) return;
+  const tilesContainer = $('map-tiles');
+  const wrap = $('map-canvas-wrap');
+  if(!tilesContainer || !wrap) return;
+  const r = wrap.getBoundingClientRect();
+  const z = _mbBestZoomLevel();
+  const maxZ = M.mbMeta.maxzoom ?? 14;
+  // Skala zwischen "World bei maxZ" (M.mbWorldPx) und Tile-Größe bei z
+  const tilesAtZ = Math.pow(2, z);
+  const worldAtZ = M.mbTileSize * tilesAtZ;
+  // M.zoom skaliert die maxZ-Welt. Für Tile-Z müssen wir entsprechend umrechnen.
+  const tileScreenSize = M.mbTileSize * M.zoom * (M.mbWorldPx / worldAtZ);
+  // Sichtbarer Bereich in "World-bei-z"-Koordinaten
+  const viewLeftWorld   = -M.panX / (M.zoom * M.mbWorldPx / worldAtZ);
+  const viewTopWorld    = -M.panY / (M.zoom * M.mbWorldPx / worldAtZ);
+  const viewRightWorld  = viewLeftWorld + r.width  / (M.zoom * M.mbWorldPx / worldAtZ);
+  const viewBottomWorld = viewTopWorld  + r.height / (M.zoom * M.mbWorldPx / worldAtZ);
+  // Welche Tile-Indizes brauchen wir? (mit kleinem Buffer)
+  const buffer = 1;
+  const xMin = Math.max(0, Math.floor(viewLeftWorld   / M.mbTileSize) - buffer);
+  const yMin = Math.max(0, Math.floor(viewTopWorld    / M.mbTileSize) - buffer);
+  const xMax = Math.min(tilesAtZ - 1, Math.floor(viewRightWorld  / M.mbTileSize) + buffer);
+  const yMax = Math.min(tilesAtZ - 1, Math.floor(viewBottomWorld / M.mbTileSize) + buffer);
+  // Set der jetzt nötigen Tile-Keys
+  const needed = new Set();
+  for(let y = yMin; y <= yMax; y++){
+    for(let x = xMin; x <= xMax; x++){
+      const key = `${z}/${x}/${y}`;
+      needed.add(key);
+      if(!M.mbTilesShown.has(key)){
+        _addTile(z, x, y, key);
+      }
+    }
+  }
+  // Tiles entfernen, die nicht mehr gebraucht werden
+  for(const [key, el] of M.mbTilesShown.entries()){
+    if(!needed.has(key)){
+      el.remove();
+      M.mbTilesShown.delete(key);
+    }
+  }
+}
+
+async function _addTile(z, x, y, key){
+  const tilesContainer = $('map-tiles');
+  if(!tilesContainer) return;
+  // Platzhalter sofort einfügen, damit wir bei mehrfachen Aufrufen kein Doppel-Laden haben
+  const placeholder = document.createElement('div');
+  placeholder.className = 'mb-tile';
+  placeholder.dataset.key = key;
+  M.mbTilesShown.set(key, placeholder);
+  tilesContainer.appendChild(placeholder);
+  try{
+    const url = await window.MBTiles.getTileUrl(z, x, y);
+    // Falls inzwischen wegnavigiert — Element könnte schon entfernt worden sein
+    if(M.mbTilesShown.get(key) !== placeholder) return;
+    // Tile-Position im "World-bei-maxZ" Koordinatensystem berechnen
+    const maxZ = M.mbMeta.maxzoom ?? 14;
+    const scale = Math.pow(2, maxZ - z);
+    const px = x * M.mbTileSize * scale;
+    const py = y * M.mbTileSize * scale;
+    const size = M.mbTileSize * scale;
+    placeholder.style.cssText =
+      `position:absolute;left:${px}px;top:${py}px;width:${size}px;height:${size}px;` +
+      `pointer-events:none;` +
+      (url ? `background-image:url(${url});background-size:100% 100%;background-repeat:no-repeat;`
+           : 'background:#0e0f11;');
+    placeholder.dataset.url = url || '';
+  }catch(_){
+    if(M.mbTilesShown.get(key) === placeholder){
+      placeholder.remove();
+      M.mbTilesShown.delete(key);
+    }
+  }
+}
+
+function _clearMBTiles(){
+  const tilesContainer = $('map-tiles');
+  if(tilesContainer){
+    // Blob-URLs freigeben
+    M.mbTilesShown.forEach(el => {
+      if(el.dataset.url) URL.revokeObjectURL(el.dataset.url);
+    });
+    [...tilesContainer.children].forEach(c => c.remove());
+    tilesContainer.style.display = 'none';
+  }
+  M.mbTilesShown.clear();
+}
 
 function toggleMapMode(){
   const ov = $('map-overlay');
@@ -4716,17 +4893,61 @@ function initMapMode(){
   const img = $('map-image');
   const hint = $('map-empty-hint');
   const wrap = $('map-canvas-wrap');
+  const tilesContainer = $('map-tiles');
   if(!img || !hint || !wrap) return;
-  // Karte aus State laden falls vorhanden
-  if(S.mapImage){
+  const stored = S.mapSource || (S.mapImage ? 'png' : null);
+  if(stored === 'mbtiles' && window.MBTiles && window.MBTiles.isTauri && window.MBTiles.currentPath){
+    // MBTiles-Modus restaurieren
+    M.source = 'mbtiles';
+    img.style.display = 'none';
+    hint.style.display = 'none';
+    window.MBTiles.metadata().then(meta => {
+      M.mbMeta = meta;
+      const maxZ = meta.maxzoom ?? 14;
+      M.mbWorldPx = M.mbTileSize * Math.pow(2, maxZ);
+      if(tilesContainer){
+        tilesContainer.style.display = 'block';
+        tilesContainer.style.width = M.mbWorldPx + 'px';
+        tilesContainer.style.height = M.mbWorldPx + 'px';
+      }
+      const svg = $('map-draw-svg');
+      if(svg){
+        svg.setAttribute('width', M.mbWorldPx);
+        svg.setAttribute('height', M.mbWorldPx);
+        svg.setAttribute('viewBox', `0 0 ${M.mbWorldPx} ${M.mbWorldPx}`);
+      }
+      M.zoom = S.mapZoom || 1;
+      M.panX = S.mapPanX || 0;
+      M.panY = S.mapPanY || 0;
+      if(!S.mapZoom) resetMapView();
+      applyMapTransform();
+      renderMapTiles();
+    }).catch(() => {
+      // Falls die MBTiles-Datei nicht mehr existiert → Hinweis anzeigen
+      M.source = 'png';
+      S.mapSource = null;
+      hint.style.display = '';
+      img.style.display = 'none';
+      if(tilesContainer) tilesContainer.style.display = 'none';
+    });
+  } else if(S.mapImage){
+    // PNG-Modus
+    M.source = 'png';
     img.src = S.mapImage;
     hint.style.display = 'none';
     img.style.display = 'block';
+    if(tilesContainer) tilesContainer.style.display = 'none';
+    M.zoom = S.mapZoom || 1;
+    M.panX = S.mapPanX || 0;
+    M.panY = S.mapPanY || 0;
   } else {
+    // Keine Karte
+    M.source = 'png';
     hint.style.display = '';
     img.style.display = 'none';
+    if(tilesContainer) tilesContainer.style.display = 'none';
   }
-  // Drawings wiederherstellen
+  // Drawings wiederherstellen (egal welcher Modus)
   const svg = $('map-draw-svg');
   if(svg){
     [...svg.children].filter(c => c.tagName !== 'defs').forEach(c => c.remove());
@@ -4737,10 +4958,6 @@ function initMapMode(){
       [...tmp.children].forEach(c => svg.appendChild(c));
     }
   }
-  // Zoom/Pan wiederherstellen oder default
-  M.zoom = S.mapZoom || 1;
-  M.panX = S.mapPanX || 0;
-  M.panY = S.mapPanY || 0;
   applyMapTransform();
   bindMapHandlers();
 }
@@ -4750,13 +4967,19 @@ function applyMapTransform(){
   if(tr) tr.style.transform = `translate(${M.panX}px, ${M.panY}px) scale(${M.zoom})`;
   const z = $('map-zoom-display');
   if(z) z.textContent = Math.round(M.zoom*100) + '%';
-  // SVG-Größe an Bild anpassen
-  const img = $('map-image');
-  const svg = $('map-draw-svg');
-  if(img && svg && img.naturalWidth){
-    svg.setAttribute('width', img.naturalWidth);
-    svg.setAttribute('height', img.naturalHeight);
-    svg.setAttribute('viewBox', `0 0 ${img.naturalWidth} ${img.naturalHeight}`);
+  if(M.source === 'mbtiles'){
+    // Tiles neu rendern (debounced minimal via requestAnimationFrame)
+    if(M._tilesRaf) cancelAnimationFrame(M._tilesRaf);
+    M._tilesRaf = requestAnimationFrame(() => renderMapTiles());
+  } else {
+    // PNG-Modus: SVG-Größe an Bild anpassen
+    const img = $('map-image');
+    const svg = $('map-draw-svg');
+    if(img && svg && img.naturalWidth){
+      svg.setAttribute('width', img.naturalWidth);
+      svg.setAttribute('height', img.naturalHeight);
+      svg.setAttribute('viewBox', `0 0 ${img.naturalWidth} ${img.naturalHeight}`);
+    }
   }
 }
 
@@ -4777,11 +5000,41 @@ function mapZoomBy(factor){
 }
 
 function resetMapView(){
-  const img = $('map-image');
   const wrap = $('map-canvas-wrap');
-  if(!img || !wrap || !img.naturalWidth) return;
-  // Karte einpassen — fit to viewport
+  if(!wrap) return;
   const r = wrap.getBoundingClientRect();
+  if(M.source === 'mbtiles'){
+    // Auf die ganze Welt einpassen (oder bounds, falls vorhanden)
+    if(M.mbMeta && M.mbMeta.bounds){
+      // bounds = "west,south,east,north" in WGS84-Grad, wir mappen auf Pixel-Koordinaten
+      const [w, s, e, n] = M.mbMeta.bounds.split(',').map(parseFloat);
+      const maxZ = M.mbMeta.maxzoom ?? 14;
+      const tilesAtMax = Math.pow(2, maxZ);
+      const totalPx = M.mbTileSize * tilesAtMax;
+      const x0 = ((w + 180) / 360) * totalPx;
+      const x1 = ((e + 180) / 360) * totalPx;
+      // Mercator-Y für Lat (vereinfacht)
+      const latRadN = n * Math.PI / 180;
+      const latRadS = s * Math.PI / 180;
+      const y0 = (1 - Math.log(Math.tan(latRadN) + 1/Math.cos(latRadN)) / Math.PI) / 2 * totalPx;
+      const y1 = (1 - Math.log(Math.tan(latRadS) + 1/Math.cos(latRadS)) / Math.PI) / 2 * totalPx;
+      const boundsW = x1 - x0, boundsH = y1 - y0;
+      M.zoom = Math.min(r.width / boundsW, r.height / boundsH) * 0.95;
+      M.panX = (r.width  - boundsW * M.zoom)/2 - x0 * M.zoom;
+      M.panY = (r.height - boundsH * M.zoom)/2 - y0 * M.zoom;
+    } else {
+      // Fallback: ganze Welt einpassen
+      M.zoom = Math.min(r.width, r.height) / M.mbWorldPx * 0.95;
+      M.panX = (r.width  - M.mbWorldPx * M.zoom) / 2;
+      M.panY = (r.height - M.mbWorldPx * M.zoom) / 2;
+    }
+    applyMapTransform();
+    renderMapTiles();
+    return;
+  }
+  // PNG-Modus: Bild einpassen
+  const img = $('map-image');
+  if(!img || !img.naturalWidth) return;
   const fitX = r.width / img.naturalWidth;
   const fitY = r.height / img.naturalHeight;
   M.zoom = Math.min(fitX, fitY) * 0.95;
@@ -4795,6 +5048,11 @@ function handleMapUpload(event){
   if(!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
+    // MBTiles-Modus verlassen, falls aktiv
+    if(M.source === 'mbtiles') _clearMBTiles();
+    M.source = 'png';
+    M.mbMeta = null;
+    S.mapSource = 'png';
     S.mapImage = ev.target.result;
     S.mapDrawings = ''; // bei neuer Karte: alte Annotationen löschen
     S.mapZoom = 1; S.mapPanX = 0; S.mapPanY = 0;
