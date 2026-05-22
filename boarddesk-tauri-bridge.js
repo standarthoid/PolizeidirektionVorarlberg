@@ -468,5 +468,84 @@ window.BoardFile = {
       }, 60_000);
     }
 
+    // ── MBTiles-Bridge ─────────────────────────────────────
+    // Stellt Funktionen bereit, mit denen das Frontend MBTiles-Karten öffnen
+    // und einzelne Kacheln als Bild-URLs abrufen kann.
+    // Funktioniert nur im Tauri-Build. Im Browser → No-Op-Stubs.
+    window.MBTiles = {
+      isTauri: IS_TAURI,
+      currentPath: null,
+
+      // Öffnet einen Datei-Dialog, lässt den User eine .mbtiles wählen
+      // und merkt sich den Pfad. Gibt den Pfad zurück oder wirft.
+      async openDialog() {
+        if (!IS_TAURI) throw new Error('MBTiles nur im Desktop-Build verfügbar');
+        const path = await invoke('mbtiles_open');
+        this.currentPath = path;
+        try { localStorage.setItem('bd_mbtiles_path', path); } catch (_) {}
+        return path;
+      },
+
+      // Öffnet eine bestimmte Datei per Pfad (für Auto-Wiederherstellung
+      // beim App-Start aus localStorage).
+      async openPath(path) {
+        if (!IS_TAURI) throw new Error('MBTiles nur im Desktop-Build verfügbar');
+        const result = await invoke('mbtiles_open_path', { path });
+        this.currentPath = result;
+        return result;
+      },
+
+      // Schließt die aktuelle MBTiles-Datei.
+      async close() {
+        if (!IS_TAURI) return;
+        await invoke('mbtiles_close');
+        this.currentPath = null;
+        try { localStorage.removeItem('bd_mbtiles_path'); } catch (_) {}
+      },
+
+      // Metadaten: { name, format, minzoom, maxzoom, bounds, center, ... }
+      async metadata() {
+        if (!IS_TAURI) throw new Error('MBTiles nur im Desktop-Build verfügbar');
+        return await invoke('mbtiles_metadata');
+      },
+
+      // Liefert eine Kachel als Blob-URL (z/x/y im Web-/Leaflet-Schema XYZ).
+      // Gibt null zurück, wenn keine Kachel an der Position existiert.
+      // Format wird aus den Bytes erraten (PNG/JPEG meistens).
+      async getTileUrl(z, x, y) {
+        if (!IS_TAURI) return null;
+        const bytes = await invoke('mbtiles_get_tile', { z, x, y });
+        if (!bytes || bytes.length === 0) return null;
+        // bytes ist ein Vec<u8> → in Uint8Array umwandeln
+        const u8 = new Uint8Array(bytes);
+        // Format raten anhand der Magic-Bytes
+        let mime = 'image/png';
+        if (u8[0] === 0xFF && u8[1] === 0xD8) mime = 'image/jpeg';
+        else if (u8[0] === 0x52 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x46) mime = 'image/webp';
+        const blob = new Blob([u8], { type: mime });
+        return URL.createObjectURL(blob);
+      },
+
+      // Beim App-Start: gespeicherten Pfad versuchen wiederherzustellen.
+      async restoreFromStorage() {
+        if (!IS_TAURI) return false;
+        try {
+          const saved = localStorage.getItem('bd_mbtiles_path');
+          if (!saved) return false;
+          await this.openPath(saved);
+          return true;
+        } catch (e) {
+          // Datei wurde verschoben/gelöscht — vergessen
+          try { localStorage.removeItem('bd_mbtiles_path'); } catch (_) {}
+          return false;
+        }
+      },
+    };
+
+    // Automatisch versuchen, beim Start die zuletzt genutzte MBTiles zu laden
+    if (IS_TAURI) {
+      window.MBTiles.restoreFromStorage().catch(() => {});
+    }
+
   });
 })();
