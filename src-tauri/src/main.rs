@@ -2,8 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use std::sync::Mutex;
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
+use rusqlite::Connection;
 
 // ── Systemschriften ──────────────────────────────────────────────────────────
 
@@ -190,18 +192,161 @@ fn app_tmp_dir(app: AppHandle) -> Result<String, String> {
     app.path().temp_dir().map(|p| p.to_string_lossy().into_owned()).map_err(|e| e.to_string())
 }
 
+// ── MBTiles-Unterstützung ────────────────────────────────────────────────────
+// MBTiles ist eine SQLite-Datenbank mit Karten-Kacheln. Wir halten eine offene
+// Connection in einem Mutex, damit wir nicht für jeden Tile-Request neu öffnen
+// müssen — das wäre sehr langsam bei tausenden Tiles pro Sekunde.
+
+#[derive(Default)]
+struct MbtilesState {
+    conn: Mutex<Option<Connection>>,
+    path: Mutex<Option<String>>,
+}
+
+#[derive(serde::Serialize)]
+struct MbtilesMetadata {
+    name:      Option<String>,
+    format:    Option<String>,
+    minzoom:   Option<i32>,
+    maxzoom:   Option<i32>,
+    bounds:    Option<String>,   // "west,south,east,north" in WGS84
+    center:    Option<String>,   // "lon,lat,zoom"
+    description: Option<String>,
+    attribution: Option<String>,
+}
+
+#[tauri::command]
+async fn mbtiles_open(app: AppHandle, state: State<'_, MbtilesState>) -> Result<String, String> {
+    // Datei-Dialog für .mbtiles
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.dialog()
+        .file()
+        .set_title("MBTiles-Karte öffnen")
+        .add_filter("MBTiles-Karten", &["mbtiles"])
+        .add_filter("Alle Dateien", &["*"])
+        .pick_file(move |path| { tx.send(path).ok(); });
+    let picked = rx.recv().map_err(|_| "Dialog abgebrochen".to_string())?;
+    let picked = picked.ok_or("Kein Pfad gewählt".to_string())?;
+    let path_buf: PathBuf = match picked {
+        FilePath::Path(p) => p,
+        FilePath::Url(u)  => PathBuf::from(u.path()),
+    };
+    mbtiles_open_path(state, path_buf.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn mbtiles_open_path(state: State<'_, MbtilesState>, path: String) -> Result<String, String> {
+    let conn = Connection::open(&path)
+        .map_err(|e| format!("MBTiles öffnen: {e}"))?;
+    // Mini-Sanity-Check: gibt es die Tabelle 'tiles'?
+    conn.query_row(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='tiles'",
+        [],
+        |_row| Ok(()),
+    ).map_err(|_| "Datei ist keine gültige MBTiles-Datenbank".to_string())?;
+    *state.conn.lock().unwrap() = Some(conn);
+    *state.path.lock().unwrap() = Some(path.clone());
+    Ok(path)
+}
+
+#[tauri::command]
+fn mbtiles_close(state: State<'_, MbtilesState>) -> Result<(), String> {
+    *state.conn.lock().unwrap() = None;
+    *state.path.lock().unwrap() = None;
+    Ok(())
+}
+
+#[tauri::command]
+fn mbtiles_current_path(state: State<'_, MbtilesState>) -> Option<String> {
+    state.path.lock().unwrap().clone()
+}
+
+#[tauri::command]
+fn mbtiles_metadata(state: State<'_, MbtilesState>) -> Result<MbtilesMetadata, String> {
+    let guard = state.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Keine MBTiles geöffnet")?;
+    let mut meta = MbtilesMetadata {
+        name: None, format: None, minzoom: None, maxzoom: None,
+        bounds: None, center: None, description: None, attribution: None,
+    };
+    let mut stmt = conn.prepare("SELECT name, value FROM metadata")
+        .map_err(|e| format!("Metadata lesen: {e}"))?;
+    let rows = stmt.query_map([], |row| {
+        let k: String = row.get(0)?;
+        let v: String = row.get(1)?;
+        Ok((k, v))
+    }).map_err(|e| e.to_string())?;
+    for row in rows {
+        let (k, v) = row.map_err(|e| e.to_string())?;
+        match k.as_str() {
+            "name"        => meta.name = Some(v),
+            "format"      => meta.format = Some(v),
+            "minzoom"     => meta.minzoom = v.parse().ok(),
+            "maxzoom"     => meta.maxzoom = v.parse().ok(),
+            "bounds"      => meta.bounds = Some(v),
+            "center"      => meta.center = Some(v),
+            "description" => meta.description = Some(v),
+            "attribution" => meta.attribution = Some(v),
+            _ => {}
+        }
+    }
+    // Falls minzoom/maxzoom nicht in den Metadaten stehen, aus den tiles ableiten
+    if meta.minzoom.is_none() || meta.maxzoom.is_none() {
+        if let Ok((mn, mx)) = conn.query_row(
+            "SELECT MIN(zoom_level), MAX(zoom_level) FROM tiles",
+            [],
+            |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?))
+        ) {
+            if meta.minzoom.is_none() { meta.minzoom = Some(mn); }
+            if meta.maxzoom.is_none() { meta.maxzoom = Some(mx); }
+        }
+    }
+    Ok(meta)
+}
+
+#[tauri::command]
+fn mbtiles_get_tile(
+    state: State<'_, MbtilesState>,
+    z: i32,
+    x: i32,
+    y: i32,
+) -> Result<Option<Vec<u8>>, String> {
+    // MBTiles speichert Tiles im TMS-Schema (Y von unten nach oben). Web/Leaflet
+    // erwarten XYZ-Schema (Y von oben). Umrechnung: tms_y = (2^z - 1) - y
+    let tms_y = (1i32 << z).saturating_sub(1) - y;
+    let guard = state.conn.lock().unwrap();
+    let conn = guard.as_ref().ok_or("Keine MBTiles geöffnet")?;
+    let result: Result<Vec<u8>, _> = conn.query_row(
+        "SELECT tile_data FROM tiles WHERE zoom_level = ?1 AND tile_column = ?2 AND tile_row = ?3",
+        [z, x, tms_y],
+        |row| row.get(0),
+    );
+    match result {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(format!("Tile-Lesefehler: {e}")),
+    }
+}
+
 // ── Entry Point ──────────────────────────────────────────────────────────────
 
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .manage(MbtilesState::default())
         .invoke_handler(tauri::generate_handler![
             open_board,
             save_board,
             autosave_board,
             app_tmp_dir,
             list_system_fonts,
+            mbtiles_open,
+            mbtiles_open_path,
+            mbtiles_close,
+            mbtiles_current_path,
+            mbtiles_metadata,
+            mbtiles_get_tile,
         ])
         .run(tauri::generate_context!())
         .expect("Fehler beim Starten der BoardDesk-App");
