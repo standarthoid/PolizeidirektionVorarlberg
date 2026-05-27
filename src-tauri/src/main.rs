@@ -216,8 +216,8 @@ struct MbtilesMetadata {
 }
 
 #[tauri::command]
-async fn mbtiles_open(app: AppHandle, state: State<'_, MbtilesState>) -> Result<String, String> {
-    // Datei-Dialog für .mbtiles
+fn mbtiles_open(app: AppHandle, state: State<'_, MbtilesState>) -> Result<String, String> {
+    // Datei-Dialog für .mbtiles — blockierend mit Channel
     let (tx, rx) = std::sync::mpsc::channel();
     app.dialog()
         .file()
@@ -231,7 +231,18 @@ async fn mbtiles_open(app: AppHandle, state: State<'_, MbtilesState>) -> Result<
         FilePath::Path(p) => p,
         FilePath::Url(u)  => PathBuf::from(u.path()),
     };
-    mbtiles_open_path(state, path_buf.to_string_lossy().into_owned())
+    let path_str = path_buf.to_string_lossy().into_owned();
+    // SQLite öffnen und in State setzen — inline, kein Self-Call wegen Mutex
+    let conn = Connection::open(&path_str)
+        .map_err(|e| format!("MBTiles öffnen: {e}"))?;
+    conn.query_row(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='tiles'",
+        [],
+        |_row| Ok(()),
+    ).map_err(|_| "Datei ist keine gültige MBTiles-Datenbank".to_string())?;
+    *state.conn.lock().unwrap() = Some(conn);
+    *state.path.lock().unwrap() = Some(path_str.clone());
+    Ok(path_str)
 }
 
 #[tauri::command]
