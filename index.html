@@ -4704,8 +4704,16 @@ const M = {
 // Lädt eine vorgekachelte MBTiles-Karte via Bridge (Rust-Backend).
 // Im Gegensatz zum PNG-Modus werden Tiles dynamisch nach Sichtbarkeit nachgeladen.
 async function loadMBTilesMap(){
-  if(typeof window.MBTiles === 'undefined' || !window.MBTiles.isTauri){
+  if(typeof window.MBTiles === 'undefined'){
+    alert('MBTiles-Funktion noch nicht bereit.\n\nDie App-Bridge ist noch nicht initialisiert. Bitte ein paar Sekunden warten und nochmal versuchen.\n\nFalls das Problem bleibt: prüfen ob `boarddesk-tauri-bridge.js` im Repo-Root liegt und beim Build mitkopiert wird.');
+    return;
+  }
+  if(!window.MBTiles.isTauri){
     alert('MBTiles-Funktion ist nur in der Desktop-App verfügbar.\nIm Browser-Modus bitte PNG verwenden.');
+    return;
+  }
+  if(typeof window.MBTiles.openDialog !== 'function'){
+    alert('MBTiles-Bridge unvollständig — die openDialog-Funktion fehlt.\nWurde die boarddesk-tauri-bridge.js auf den aktuellen Stand gebracht?');
     return;
   }
   try{
