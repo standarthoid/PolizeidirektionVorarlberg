@@ -839,6 +839,10 @@ window._pdfjsReady = (function(){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
       Ansicht
     </button>
+    <button class="hdr-btn" id="map-tools-toggle-btn" data-onclick="toggleMapDrawToolbar()" title="Zeichenwerkzeuge ein-/ausblenden" style="display:inline-flex;align-items:center;gap:5px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Werkzeuge
+    </button>
     <button class="hdr-btn" data-onclick="toggleMapMode()" title="Karten-Modus beenden (ESC)" style="display:inline-flex;align-items:center;gap:5px;color:#ff6060;border-color:rgba(255,80,80,.4);font-weight:600;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       ← Board
@@ -1083,6 +1087,8 @@ function setTool(t){
   canvasWrap.style.cursor=c[t]||'default';
   itemsLayer.style.pointerEvents=DRAW_TOOLS.includes(t)?'none':'';
   applyLayerOrder(); // draw-layers über items-layer wenn Zeichenwerkzeug aktiv
+  // Karten-Cursor aktualisieren wenn Karte aktiv
+  const _mo=$('map-canvas-wrap');if(_mo)_mo.style.cursor=DRAW_TOOLS.includes(t)?'crosshair':'grab';
 }
 
 
@@ -4906,9 +4912,14 @@ function toggleMapMode(){
     S.mapPanY = M.panY;
     scheduleSave();
     ov.style.display = 'none';
-    // mini-ctrl wieder einblenden
+    // mini-ctrl + Toolbar zurücksetzen (map mode verlassen)
     const _mc2 = document.getElementById('mini-ctrl');
-    if(_mc2) _mc2.style.visibility = '';
+    if(_mc2){ _mc2.style.visibility = ''; _mc2.style.zIndex = ''; }
+    const _tb2 = document.getElementById('toolbar');
+    if(_tb2){ _tb2.style.zIndex = ''; }
+    _mapDrawToolbarVisible = false;
+    const _mtb = document.getElementById('map-tools-toggle-btn');
+    if(_mtb){ _mtb.style.borderColor = ''; _mtb.style.color = ''; }
     // Tauri-nativen Fullscreen UND Browser-Fullscreen beenden
     try{
       if(window.__TAURI__){
@@ -4933,6 +4944,24 @@ function toggleMapMode(){
   }
 }
 
+
+let _mapDrawToolbarVisible = false;
+function toggleMapDrawToolbar(){
+  const tb = document.getElementById('toolbar');
+  const mc = document.getElementById('mini-ctrl');
+  const btn = document.getElementById('map-tools-toggle-btn');
+  _mapDrawToolbarVisible = !_mapDrawToolbarVisible;
+  if(_mapDrawToolbarVisible){
+    // Über das Overlay heben (z-index > 8500)
+    if(tb){ tb.style.zIndex = '9000'; tb.classList.remove('hidden'); }
+    if(mc){ mc.style.visibility = 'visible'; mc.style.zIndex = '9001'; }
+    if(btn){ btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)'; }
+  } else {
+    if(tb){ tb.style.zIndex = ''; }
+    if(mc){ mc.style.visibility = 'hidden'; mc.style.zIndex = ''; }
+    if(btn){ btn.style.borderColor = ''; btn.style.color = ''; }
+  }
+}
 
 function toggleMapToolbar(){
   const tb = document.getElementById('map-mode-toolbar');
@@ -5171,6 +5200,16 @@ function bindMapHandlers(){
   const _mapPointers = new Map();
   let _mapPinchStartDist = null, _mapPinchStartZoom = 1, _mapPinchCenter = null;
 
+  // Cursor je nach aktivem Werkzeug aktualisieren
+  function _updateMapCursor(){
+    const wrap2 = $('map-canvas-wrap');
+    if(!wrap2) return;
+    wrap2.style.cursor = DRAW_TOOLS.includes(S.tool) ? 'crosshair' : 'grab';
+  }
+  // Bei Tool-Wechsel Cursor neu setzen
+  const _origSetTool = window._mapSetToolHook;
+  document.addEventListener('map-tool-change', _updateMapCursor);
+
   wrap.addEventListener('pointerdown', e => {
     if(e.target.closest('button,a,input')) return;
     wrap.setPointerCapture(e.pointerId);
@@ -5194,7 +5233,8 @@ function bindMapHandlers(){
 
     if(_mapPointers.size === 1){
       const isDrawTool = DRAW_TOOLS.includes(S.tool);
-      if(isDrawTool && S.mapImage){
+      // Zeichnen erlauben wenn PNG geladen ODER MBTiles aktiv
+      if(isDrawTool && (S.mapImage || M.source === 'mbtiles')){
         // Zeichnen starten — Koordinaten in Bild-Pixel umrechnen
         startMapDraw(e);
       } else {
@@ -5400,7 +5440,10 @@ function togglePresentation(){
       if(window.__TAURI__){
         const invoke=(window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke
           ||(window.__TAURI__?.tauri?.invoke);
-        if(invoke) invoke('plugin:window|set_fullscreen',{value:true}).catch(()=>{});
+        if(invoke){
+          invoke('plugin:window|set_fullscreen',{value:true}).catch(()=>{});
+          invoke('plugin:window|set_decorations',{value:false}).catch(()=>{});
+        }
       } else { document.documentElement.requestFullscreen?.().catch(()=>{}); }
     }catch(_){}
   } else {
@@ -5818,7 +5861,9 @@ function applyLayerOrder(){
       if(el){
         const isSelected=S.selectedIds.has(it.id);
         if(it.type==='folder'){
-          if(el.style.zIndex!=='0') el.style.zIndex='0';
+          // Ordner respektieren die Layer-Reihenfolge (nicht mehr auf 0 gezwungen)
+          const fz=String((i+1)*1000+(it.z||1)+(isSelected?500:0));
+          if(el.style.zIndex!==fz) el.style.zIndex=fz;
         } else if(it.type==='file'&&!isSelected){
           if(el.style.zIndex!=='3') el.style.zIndex='3';
         } else {
