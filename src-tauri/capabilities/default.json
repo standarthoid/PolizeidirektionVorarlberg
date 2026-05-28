@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Standard-Berechtigungen für BoardDesk / LPD Vorarlberg",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-set-fullscreen",
@@ -18,6 +20,7 @@
     "fs:allow-read-file",
     "fs:allow-write-file",
     "fs:allow-read-dir",
-    "fs:allow-mkdir"
+    "fs:allow-mkdir",
+    "core:window:allow-set-decorations"
   ]
 }
