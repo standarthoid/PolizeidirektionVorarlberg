@@ -216,7 +216,7 @@ struct MbtilesMetadata {
 }
 
 #[tauri::command]
-fn mbtiles_open(app: AppHandle, state: State<'_, MbtilesState>) -> Result<String, String> {
+async fn mbtiles_open(app: AppHandle, state: State<'_, MbtilesState>) -> Result<String, String> {
     // Datei-Dialog für .mbtiles — blockierend mit Channel
     let (tx, rx) = std::sync::mpsc::channel();
     app.dialog()
