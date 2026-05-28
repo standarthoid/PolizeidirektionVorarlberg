@@ -806,6 +806,9 @@ window._pdfjsReady = (function(){
         <button class="bp-btn primary" data-onclick="window._openFileInput('map-upload-input','image/*',false,handleMapUpload)" style="cursor:pointer;">PNG/JPEG hochladen</button>
         <button class="bp-btn" data-onclick="loadMBTilesMap()" style="cursor:pointer;">MBTiles-Karte öffnen</button>
       </div>
+      <div style="margin-top:22px;">
+        <button class="bp-btn" data-onclick="toggleMapMode()" style="cursor:pointer;opacity:.7;font-size:11px;">← Zurück zum Board</button>
+      </div>
       <div style="font-size:10px;color:var(--text-dimmer);margin-top:14px;line-height:1.5;max-width:340px;">
         <strong>PNG/JPEG</strong>: ein einzelnes hochauflösendes Bild, begrenzte Zoom-Tiefe.<br>
         <strong>MBTiles</strong>: vorgekachelte Karte aus QGIS, beliebig tiefes Zoomen.
@@ -831,9 +834,9 @@ window._pdfjsReady = (function(){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
       Ansicht
     </button>
-    <button class="hdr-btn" data-onclick="toggleMapMode()" title="Karten-Modus beenden" style="display:inline-flex;align-items:center;gap:5px;color:#ff6060;border-color:rgba(255,80,80,.4);">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      Schließen
+    <button class="hdr-btn" data-onclick="toggleMapMode()" title="Karten-Modus beenden (ESC)" style="display:inline-flex;align-items:center;gap:5px;color:#ff6060;border-color:rgba(255,80,80,.4);font-weight:600;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      ← Board
     </button>
   </div>
 
@@ -4371,7 +4374,7 @@ document.addEventListener('keydown',e=>{
     if(e.key !== 'Escape') return;
   }
   ctxMenu.style.display='none';
-  if(e.key==='Escape'){clearSelection();closeModal();closeViewer();if(S.presentation)togglePresentation();return;}
+  if(e.key==='Escape'){clearSelection();closeModal();closeViewer();if(S.presentation)togglePresentation();const _mo=$('map-overlay');if(_mo&&_mo.style.display!=='none'){toggleMapMode();return;}return;}
   // F11 → Vollbild umschalten
   if(e.key==='F11'){
     e.preventDefault();
@@ -4719,6 +4722,15 @@ async function loadMBTilesMap(){
   try{
     // Falls bereits eine MBTiles geöffnet ist, immer neu wählen lassen
     // (kein confirm() — das würde den Dialog-Plugin auslösen)
+    // Fullscreen temporär verlassen, damit der native Datei-Dialog sichtbar ist
+    let _wasFullscreen = false;
+    try{
+      if(window.__TAURI__){
+        const _inv=(window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke||(window.__TAURI__?.tauri?.invoke);
+        if(_inv){ await _inv('plugin:window|set_fullscreen',{value:false}).catch(()=>{}); _wasFullscreen=true; }
+      }
+    }catch(_){}
+    await new Promise(r=>setTimeout(r,150)); // kurz warten bis OS Fenster angepasst hat
     await window.MBTiles.openDialog();
     const meta = await window.MBTiles.metadata();
     M.source = 'mbtiles';
@@ -4749,9 +4761,23 @@ async function loadMBTilesMap(){
     resetMapView();
     renderMapTiles();
   }catch(err){
+    // Fullscreen nach Dialog-Abbruch wiederherstellen
+    try{
+      if(window.__TAURI__ && _wasFullscreen){
+        const _inv=(window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke||(window.__TAURI__?.tauri?.invoke);
+        if(_inv) _inv('plugin:window|set_fullscreen',{value:true}).catch(()=>{});
+      }
+    }catch(_){}
     if(err && (err.message||'').toLowerCase().includes('abgebrochen')) return;
     showInfo('MBTiles konnte nicht geöffnet werden: '+(err?.message||err));
   }
+  // Fullscreen nach Dialog wiederherstellen (egal ob Erfolg oder Fehler außer Abbruch)
+  try{
+    if(window.__TAURI__ && _wasFullscreen){
+      const _inv=(window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke||(window.__TAURI__?.tauri?.invoke);
+      if(_inv) _inv('plugin:window|set_fullscreen',{value:true}).catch(()=>{});
+    }
+  }catch(_){}
 }
 
 // Bestimmt die optimale Zoom-Stufe für die aktuelle Welt-Skalierung.
@@ -4875,7 +4901,13 @@ function toggleMapMode(){
     S.mapPanY = M.panY;
     scheduleSave();
     ov.style.display = 'none';
-    document.exitFullscreen?.().catch(()=>{});
+    // Tauri-nativen Fullscreen UND Browser-Fullscreen beenden
+    try{
+      if(window.__TAURI__){
+        const _inv=(window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke||(window.__TAURI__?.tauri?.invoke);
+        if(_inv) _inv('plugin:window|set_fullscreen',{value:false}).catch(()=>{});
+      } else { document.exitFullscreen?.().catch(()=>{}); }
+    }catch(_){}
   } else {
     ov.style.display = 'flex';
     initMapMode();
