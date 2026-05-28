@@ -4705,28 +4705,21 @@ const M = {
 // Im Gegensatz zum PNG-Modus werden Tiles dynamisch nach Sichtbarkeit nachgeladen.
 async function loadMBTilesMap(){
   if(typeof window.MBTiles === 'undefined'){
-    alert('MBTiles-Funktion noch nicht bereit.\n\nDie App-Bridge ist noch nicht initialisiert. Bitte ein paar Sekunden warten und nochmal versuchen.\n\nFalls das Problem bleibt: prüfen ob `boarddesk-tauri-bridge.js` im Repo-Root liegt und beim Build mitkopiert wird.');
+    showInfo('MBTiles-Funktion noch nicht bereit. Die App-Bridge ist noch nicht initialisiert — bitte ein paar Sekunden warten und nochmal versuchen. Falls das Problem bleibt: prüfen ob boarddesk-tauri-bridge.js im Repo-Root liegt.');
     return;
   }
   if(!window.MBTiles.isTauri){
-    alert('MBTiles-Funktion ist nur in der Desktop-App verfügbar.\nIm Browser-Modus bitte PNG verwenden.');
+    showInfo('MBTiles-Funktion ist nur in der Desktop-App verfügbar. Im Browser-Modus bitte PNG verwenden.');
     return;
   }
   if(typeof window.MBTiles.openDialog !== 'function'){
-    alert('MBTiles-Bridge unvollständig — die openDialog-Funktion fehlt.\nWurde die boarddesk-tauri-bridge.js auf den aktuellen Stand gebracht?');
+    showInfo('MBTiles-Bridge unvollständig — die openDialog-Funktion fehlt. Wurde boarddesk-tauri-bridge.js aktualisiert?');
     return;
   }
   try{
-    // Falls bereits eine MBTiles geöffnet ist, fragen ob ersetzen oder die aktuelle nutzen
-    if(window.MBTiles.currentPath){
-      const reuse = confirm('Eine MBTiles ist bereits geöffnet:\n'+window.MBTiles.currentPath+
-        '\n\n[OK] um sie zu nutzen, [Abbrechen] um eine andere zu wählen.');
-      if(!reuse){
-        await window.MBTiles.openDialog();
-      }
-    } else {
-      await window.MBTiles.openDialog();
-    }
+    // Falls bereits eine MBTiles geöffnet ist, immer neu wählen lassen
+    // (kein confirm() — das würde den Dialog-Plugin auslösen)
+    await window.MBTiles.openDialog();
     const meta = await window.MBTiles.metadata();
     M.source = 'mbtiles';
     M.mbMeta = meta;
@@ -4757,7 +4750,7 @@ async function loadMBTilesMap(){
     renderMapTiles();
   }catch(err){
     if(err && (err.message||'').toLowerCase().includes('abgebrochen')) return;
-    alert('MBTiles konnte nicht geöffnet werden:\n'+(err?.message||err));
+    showInfo('MBTiles konnte nicht geöffnet werden: '+(err?.message||err));
   }
 }
 
@@ -5085,11 +5078,19 @@ function handleMapUpload(event){
 }
 
 function clearMapDrawings(){
-  if(!confirm('Alle Zeichnungen auf der Karte löschen?')) return;
+  openModal(`<div class="modal-title">Zeichnungen löschen</div>
+    <p style="font-size:12px;font-family:var(--mono);color:var(--text-dim);margin-bottom:14px">Alle Zeichnungen auf der Karte wirklich löschen?</p>
+    <div class="modal-btns">
+      <button class="modal-btn cancel" data-onclick="closeModal()">Abbrechen</button>
+      <button class="modal-btn" style="background:#e74c3c;color:#fff;border-color:#e74c3c" data-onclick="_doClearMapDrawings()">Löschen</button>
+    </div>`);
+}
+function _doClearMapDrawings(){
   const svg = $('map-draw-svg');
   if(svg) [...svg.children].filter(c => c.tagName !== 'defs').forEach(c => c.remove());
   S.mapDrawings = '';
   scheduleSave();
+  closeModal();
 }
 
 let _mapHandlersBound = false;
