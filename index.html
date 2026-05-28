@@ -817,7 +817,12 @@ window._pdfjsReady = (function(){
   </div>
 
   <!-- Toolbar oben — minimal wie im Präsentationsmodus -->
-  <div id="map-mode-toolbar" style="position:absolute;top:14px;right:14px;display:flex;gap:8px;z-index:10;">
+  <!-- Kleiner Toggle-Button der immer sichtbar bleibt wenn Toolbar versteckt ist -->
+  <button id="map-toolbar-toggle" data-onclick="toggleMapToolbar()" title="Toolbar ein-/ausblenden"
+    style="position:absolute;top:10px;right:10px;z-index:11;background:var(--surface);border:1px solid var(--border);
+    border-radius:8px;padding:5px 8px;cursor:pointer;color:var(--text-dim);font-size:14px;display:flex;align-items:center;justify-content:center;
+    line-height:1;opacity:.7;">≡</button>
+  <div id="map-mode-toolbar" style="position:absolute;top:10px;right:44px;display:flex;gap:8px;z-index:10;">
     <button class="hdr-btn" data-onclick="window._openFileInput('map-upload-input','image/*',false,handleMapUpload)" title="PNG/JPEG-Karte laden" style="display:inline-flex;align-items:center;gap:5px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       PNG
@@ -4901,6 +4906,9 @@ function toggleMapMode(){
     S.mapPanY = M.panY;
     scheduleSave();
     ov.style.display = 'none';
+    // mini-ctrl wieder einblenden
+    const _mc2 = document.getElementById('mini-ctrl');
+    if(_mc2) _mc2.style.visibility = '';
     // Tauri-nativen Fullscreen UND Browser-Fullscreen beenden
     try{
       if(window.__TAURI__){
@@ -4910,6 +4918,9 @@ function toggleMapMode(){
     }catch(_){}
   } else {
     ov.style.display = 'flex';
+    // mini-ctrl (z-index:10003) beim Kartenmodus verstecken – liegt sonst über dem Overlay
+    const _mc = document.getElementById('mini-ctrl');
+    if(_mc) _mc.style.visibility = 'hidden';
     initMapMode();
     // Vollbild aktivieren — wie Präsentationsmodus
     try{
@@ -4922,6 +4933,15 @@ function toggleMapMode(){
   }
 }
 
+
+function toggleMapToolbar(){
+  const tb = document.getElementById('map-mode-toolbar');
+  const btn = document.getElementById('map-toolbar-toggle');
+  if(!tb) return;
+  const hidden = tb.style.display === 'none';
+  tb.style.display = hidden ? 'flex' : 'none';
+  if(btn){ btn.style.opacity = hidden ? '.7' : '1'; btn.style.borderColor = hidden ? '' : 'var(--accent)'; }
+}
 function initMapMode(){
   const img = $('map-image');
   const hint = $('map-empty-hint');

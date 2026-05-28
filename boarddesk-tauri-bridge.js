@@ -72,7 +72,7 @@ function uint8ToB64(arr) {
 
 // ── Erkennung: Tauri vs. Browser ─────────────────────────────────────────────
 
-const IS_TAURI = typeof window.__TAURI__ !== 'undefined';
+const IS_TAURI = typeof window.__TAURI__ !== 'undefined' || typeof window.__TAURI_INTERNALS__ !== 'undefined';
 
 async function tauriInvoke(cmd, args) {
   const { invoke } = await import('@tauri-apps/api/core');
@@ -473,7 +473,7 @@ window.BoardFile = {
     // und einzelne Kacheln als Bild-URLs abrufen kann.
     // Funktioniert nur im Tauri-Build. Im Browser → No-Op-Stubs.
     window.MBTiles = {
-      isTauri: IS_TAURI,
+      get isTauri() { return typeof window.__TAURI__ !== 'undefined' || typeof window.__TAURI_INTERNALS__ !== 'undefined'; },
       currentPath: null,
 
       // Öffnet einen Datei-Dialog, lässt den User eine .mbtiles wählen
