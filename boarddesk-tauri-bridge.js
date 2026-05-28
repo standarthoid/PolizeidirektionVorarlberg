@@ -480,7 +480,7 @@ window.BoardFile = {
       // und merkt sich den Pfad. Gibt den Pfad zurück oder wirft.
       async openDialog() {
         if (!IS_TAURI) throw new Error('MBTiles nur im Desktop-Build verfügbar');
-        const path = await invoke('mbtiles_open');
+        const path = await tauriInvoke('mbtiles_open');
         this.currentPath = path;
         try { localStorage.setItem('bd_mbtiles_path', path); } catch (_) {}
         return path;
@@ -490,7 +490,7 @@ window.BoardFile = {
       // beim App-Start aus localStorage).
       async openPath(path) {
         if (!IS_TAURI) throw new Error('MBTiles nur im Desktop-Build verfügbar');
-        const result = await invoke('mbtiles_open_path', { path });
+        const result = await tauriInvoke('mbtiles_open_path', { path });
         this.currentPath = result;
         return result;
       },
@@ -498,7 +498,7 @@ window.BoardFile = {
       // Schließt die aktuelle MBTiles-Datei.
       async close() {
         if (!IS_TAURI) return;
-        await invoke('mbtiles_close');
+        await tauriInvoke('mbtiles_close');
         this.currentPath = null;
         try { localStorage.removeItem('bd_mbtiles_path'); } catch (_) {}
       },
@@ -506,7 +506,7 @@ window.BoardFile = {
       // Metadaten: { name, format, minzoom, maxzoom, bounds, center, ... }
       async metadata() {
         if (!IS_TAURI) throw new Error('MBTiles nur im Desktop-Build verfügbar');
-        return await invoke('mbtiles_metadata');
+        return await tauriInvoke('mbtiles_metadata');
       },
 
       // Liefert eine Kachel als Blob-URL (z/x/y im Web-/Leaflet-Schema XYZ).
@@ -514,7 +514,7 @@ window.BoardFile = {
       // Format wird aus den Bytes erraten (PNG/JPEG meistens).
       async getTileUrl(z, x, y) {
         if (!IS_TAURI) return null;
-        const bytes = await invoke('mbtiles_get_tile', { z, x, y });
+        const bytes = await tauriInvoke('mbtiles_get_tile', { z, x, y });
         if (!bytes || bytes.length === 0) return null;
         // bytes ist ein Vec<u8> → in Uint8Array umwandeln
         const u8 = new Uint8Array(bytes);
