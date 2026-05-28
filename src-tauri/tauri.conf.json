@@ -19,7 +19,8 @@
       "csp": null,
       "devCsp": null,
       "dangerousDisableAssetCspModification": true
-    }
+    },
+    "withGlobalTauri": true
   },
   "build": {
     "frontendDist": "./dist"
