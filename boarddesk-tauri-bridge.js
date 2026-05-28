@@ -75,7 +75,12 @@ function uint8ToB64(arr) {
 const IS_TAURI = typeof window.__TAURI__ !== 'undefined' || typeof window.__TAURI_INTERNALS__ !== 'undefined';
 
 async function tauriInvoke(cmd, args) {
-  const { invoke } = await import('@tauri-apps/api/core');
+  // withGlobalTauri:true → window.__TAURI__.core.invoke ist direkt verfügbar.
+  // Kein dynamic import nötig (würde ohne Bundler scheitern).
+  const invoke = window.__TAURI__?.core?.invoke
+    || window.__TAURI_INTERNALS__?.core?.invoke
+    || window.__TAURI__?.tauri?.invoke;
+  if (!invoke) throw new Error('Tauri invoke nicht verfügbar – läuft die App als Tauri-Desktop-Build?');
   return invoke(cmd, args);
 }
 
