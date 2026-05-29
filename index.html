@@ -842,6 +842,10 @@ window._pdfjsReady = (function(){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
       Werkzeuge
     </button>
+    <button class="hdr-btn" id="map-header-toggle-btn" data-onclick="toggleMapHeader()" title="Kopfzeile ein-/ausblenden" style="display:inline-flex;align-items:center;gap:5px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      Kopfzeile
+    </button>
     <button class="hdr-btn" data-onclick="toggleMapMode()" title="Karten-Modus beenden (ESC)" style="display:inline-flex;align-items:center;gap:5px;color:#ff6060;border-color:rgba(255,80,80,.4);font-weight:600;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       ← Board
@@ -4385,10 +4389,10 @@ document.addEventListener('keydown',e=>{
   }
   ctxMenu.style.display='none';
   if(e.key==='Escape'){clearSelection();closeModal();closeViewer();if(S.presentation)togglePresentation();const _mo=$('map-overlay');if(_mo&&_mo.style.display!=='none'){toggleMapMode();return;}return;}
-  // F11 → Vollbild umschalten
+  // F11 → nur native Fensterleiste (Vollbild), NICHT Präsentationsmodus
   if(e.key==='F11'){
     e.preventDefault();
-    togglePresentation();
+    toggleFullscreen();
     return;
   }
   if(isTyping()) return;
@@ -4911,6 +4915,12 @@ function toggleMapMode(){
     S.mapPanY = M.panY;
     scheduleSave();
     ov.style.display = 'none';
+    // Header wiederherstellen
+    const _hdr2 = document.getElementById('header');
+    if(_hdr2 && _hdr2.dataset.mapHidden){ _hdr2.style.display=''; delete _hdr2.dataset.mapHidden; }
+    // Toolbar zurück auf normale Position
+    const _mmt = document.getElementById('map-mode-toolbar');
+    if(_mmt) _mmt.style.top = '';
     // mini-ctrl + Toolbar zurücksetzen (map mode verlassen)
     const _mc2 = document.getElementById('mini-ctrl');
     if(_mc2){ _mc2.style.visibility = ''; _mc2.style.zIndex = ''; }
@@ -4919,8 +4929,11 @@ function toggleMapMode(){
     const _tb2 = document.getElementById('toolbar');
     if(_tb2){ _tb2.style.zIndex = ''; }
     _mapDrawToolbarVisible = false;
+    _mapHeaderVisible = false;
     const _mtb = document.getElementById('map-tools-toggle-btn');
     if(_mtb){ _mtb.style.borderColor = ''; _mtb.style.color = ''; }
+    const _mhb = document.getElementById('map-header-toggle-btn');
+    if(_mhb){ _mhb.style.borderColor = ''; _mhb.style.color = ''; }
     // Tauri-nativen Fullscreen UND Browser-Fullscreen beenden
     try{
       if(window.__TAURI__){
@@ -4930,6 +4943,9 @@ function toggleMapMode(){
     }catch(_){}
   } else {
     ov.style.display = 'flex';
+    // Header ausblenden (z-index:10000 > Overlay:8500, läge sonst immer darüber)
+    const _hdr = document.getElementById('header');
+    if(_hdr){ _hdr.dataset.mapHidden='1'; _hdr.style.display='none'; }
     // side-panel + mini-ctrl beim Kartenmodus verstecken
     const _mc = document.getElementById('mini-ctrl');
     if(_mc){ _mc.style.visibility='hidden'; _mc.dataset.mapHidden='1'; }
@@ -4949,6 +4965,26 @@ function toggleMapMode(){
 
 
 let _mapDrawToolbarVisible = false;
+let _mapHeaderVisible = false;  // Header ist beim Start des Kartenmodus versteckt
+
+function toggleMapHeader(){
+  const hdr = document.getElementById('header');
+  const toolbar = document.getElementById('map-mode-toolbar');
+  const btn = document.getElementById('map-header-toggle-btn');
+  _mapHeaderVisible = !_mapHeaderVisible;
+  if(_mapHeaderVisible){
+    // Header einblenden – Toolbar darunter verschieben damit kein Overlap
+    if(hdr){ hdr.style.display=''; }
+    if(toolbar){ toolbar.style.top = '62px'; }
+    if(btn){ btn.style.borderColor='var(--accent)'; btn.style.color='var(--accent)'; }
+  } else {
+    // Header wieder ausblenden
+    if(hdr){ hdr.style.display='none'; }
+    if(toolbar){ toolbar.style.top = '10px'; }
+    if(btn){ btn.style.borderColor=''; btn.style.color=''; }
+  }
+}
+
 function toggleMapDrawToolbar(){
   const tb = document.getElementById('toolbar');
   const mc = document.getElementById('mini-ctrl');
@@ -5510,6 +5546,26 @@ function eraseMapAt(p){
   scheduleSave();
 }
 
+
+function toggleFullscreen(){
+  if(!window.__TAURI__) return; // nur sinnvoll in Desktop-App
+  S.windowFullscreen = !S.windowFullscreen;
+  const invoke=(window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke
+    ||(window.__TAURI__?.tauri?.invoke);
+  if(invoke){
+    invoke('plugin:window|set_fullscreen',{value:S.windowFullscreen}).catch(()=>{});
+    invoke('plugin:window|set_decorations',{value:!S.windowFullscreen}).catch(()=>{});
+  }
+  try{
+    const win=window.__TAURI__?.window?.getCurrent?.()
+      ||window.__TAURI__?.window?.getCurrentWindow?.();
+    if(win){
+      win.setFullscreen(S.windowFullscreen).catch(()=>{});
+      win.setDecorations(!S.windowFullscreen).catch(()=>{});
+    }
+  }catch(_){}
+}
+
 function togglePresentation(){
   S.presentation=!S.presentation;
   const hdr=$('header');
@@ -5520,44 +5576,13 @@ function togglePresentation(){
     if(msbar) msbar.style.display='none';
     if(hint) hint.classList.add('show');
     canvasWrap.style.top='0';
-    try{
-      if(window.__TAURI__){
-        const invoke=(window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke
-          ||(window.__TAURI__?.tauri?.invoke);
-        if(invoke){
-          invoke('plugin:window|set_fullscreen',{value:true}).catch(()=>{});
-          invoke('plugin:window|set_decorations',{value:false}).catch(()=>{});
-        }
-        // Zusätzlich über window API (robuster auf Windows)
-        try{
-          const win=window.__TAURI__?.window?.getCurrent?.()
-            ||window.__TAURI__?.window?.getCurrentWindow?.();
-          if(win){ win.setFullscreen(true).catch(()=>{}); win.setDecorations(false).catch(()=>{}); }
-        }catch(_){}
-      } else { document.documentElement.requestFullscreen?.().catch(()=>{}); }
-    }catch(_){}
   } else {
     if(hdr) hdr.style.display='';
+    if(msbar) msbar.style.display='';
     if(hint) hint.classList.remove('show');
     canvasWrap.style.top='';
-    try{
-      if(window.__TAURI__){
-        const invoke=(window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke
-          ||(window.__TAURI__?.tauri?.invoke);
-        if(invoke){
-          invoke('plugin:window|set_fullscreen',{value:false}).catch(()=>{});
-          invoke('plugin:window|set_decorations',{value:true}).catch(()=>{});
-        }
-        try{
-          const win=window.__TAURI__?.window?.getCurrent?.()
-            ||window.__TAURI__?.window?.getCurrentWindow?.();
-          if(win){ win.setFullscreen(false).catch(()=>{}); win.setDecorations(true).catch(()=>{}); }
-        }catch(_){}
-      } else { document.fullscreenElement&&document.exitFullscreen(); }
-    }catch(_){}
   }
   $('present-btn')?.classList.toggle('active',S.presentation);
-  // Burger-Button im Präsentationsmodus ein-/ausblenden
   const psb = document.getElementById('pres-side-toggle');
   if(psb) psb.style.display = S.presentation ? 'flex' : 'none';
 }
