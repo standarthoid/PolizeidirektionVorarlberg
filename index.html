@@ -821,13 +821,7 @@ window._pdfjsReady = (function(){
     </div>
   </div>
 
-  <!-- Toolbar oben — minimal wie im Präsentationsmodus -->
-  <!-- Kleiner Toggle-Button der immer sichtbar bleibt wenn Toolbar versteckt ist -->
-  <button id="map-toolbar-toggle" data-onclick="toggleMapToolbar()" title="Toolbar ein-/ausblenden"
-    style="position:absolute;top:10px;right:10px;z-index:11;background:var(--surface);border:1px solid var(--border);
-    border-radius:8px;padding:5px 8px;cursor:pointer;color:var(--text-dim);font-size:14px;display:flex;align-items:center;justify-content:center;
-    line-height:1;opacity:.7;">≡</button>
-  <div id="map-mode-toolbar" style="position:absolute;top:10px;right:44px;display:flex;gap:8px;z-index:10;">
+  <div id="map-mode-toolbar" style="position:absolute;top:10px;right:10px;display:flex;gap:8px;z-index:11;align-items:center;">
     <button class="hdr-btn" data-onclick="window._openFileInput('map-upload-input','image/*',false,handleMapUpload)" title="PNG/JPEG-Karte laden" style="display:inline-flex;align-items:center;gap:5px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       PNG
@@ -4936,11 +4930,11 @@ function toggleMapMode(){
     }catch(_){}
   } else {
     ov.style.display = 'flex';
-    // side-panel + mini-ctrl (z-index:10002/10003) beim Kartenmodus verstecken
+    // side-panel + mini-ctrl beim Kartenmodus verstecken
     const _mc = document.getElementById('mini-ctrl');
-    if(_mc) _mc.style.visibility = 'hidden';
+    if(_mc){ _mc.style.visibility='hidden'; _mc.dataset.mapHidden='1'; }
     const _sp = document.getElementById('side-panel');
-    if(_sp) _sp.style.visibility = 'hidden';
+    if(_sp){ _sp.style.visibility='hidden'; _sp.dataset.mapHidden='1'; }
     initMapMode();
     // Vollbild aktivieren — wie Präsentationsmodus
     try{
@@ -5057,21 +5051,40 @@ function initMapMode(){
 }
 
 function _clampMapPan(){
-  // Verhindert schwarze Ränder: Pan-Werte so begrenzen, dass die Karte immer den Viewport füllt
   const wrap = $('map-canvas-wrap');
   if(!wrap) return;
   const ww = wrap.clientWidth, wh = wrap.clientHeight;
-  let cw, ch;
-  if(M.source === 'mbtiles'){ cw = ch = M.mbWorldPx; }
-  else { const img = $('map-image'); cw = img ? img.naturalWidth : 0; ch = img ? img.naturalHeight : 0; }
-  if(!cw || !ch) return;
-  const sw = cw * M.zoom, sh = ch * M.zoom;
-  // Minimum-Zoom: Karte muss Viewport in BEIDEN Dimensionen füllen
-  const minZoom = Math.max(ww / cw, wh / ch);
-  if(M.zoom < minZoom){ M.zoom = minZoom; }
-  const sw2 = cw * M.zoom, sh2 = ch * M.zoom;
-  M.panX = sw2 >= ww ? Math.max(ww - sw2, Math.min(0, M.panX)) : (ww - sw2) / 2;
-  M.panY = sh2 >= wh ? Math.max(wh - sh2, Math.min(0, M.panY)) : (wh - sh2) / 2;
+  if(ww <= 0 || wh <= 0) return;
+
+  if(M.source === 'mbtiles' && M.contentBounds){
+    // MBTiles: Clamping auf Content-Bounds (Vorarlberg-Ausschnitt), nicht Welt-Pixel
+    const {x0,y0,x1,y1} = M.contentBounds;
+    const cw = x1 - x0, ch = y1 - y0;
+    if(cw <= 0 || ch <= 0) return;
+    // Minimum-Zoom: Content muss Viewport in beiden Richtungen füllen
+    const minZoom = Math.max(ww / cw, wh / ch);
+    if(M.zoom < minZoom) M.zoom = minZoom;
+    // Erlaubter Pan-Bereich: Content-Bereich muss immer den Viewport abdecken
+    const ox = x0 * M.zoom, oy = y0 * M.zoom;  // Offset des Content-Starts in screen-px
+    const sw = cw * M.zoom, sh = ch * M.zoom;
+    const maxPX = -ox;                           // kann nicht weiter rechts als Content-Anfang
+    const minPX = ww - (ox + sw);               // kann nicht weiter links als Content-Ende
+    const maxPY = -oy;
+    const minPY = wh - (oy + sh);
+    M.panX = Math.max(minPX, Math.min(maxPX, M.panX));
+    M.panY = Math.max(minPY, Math.min(maxPY, M.panY));
+  } else {
+    // PNG-Modus oder MBTiles ohne Bounds
+    let cw, ch;
+    if(M.source === 'mbtiles'){ cw = ch = M.mbWorldPx; }
+    else { const img = $('map-image'); cw = img ? img.naturalWidth : 0; ch = img ? img.naturalHeight : 0; }
+    if(!cw || !ch) return;
+    const minZoom = Math.max(ww / cw, wh / ch);
+    if(M.zoom < minZoom) M.zoom = minZoom;
+    const sw = cw * M.zoom, sh = ch * M.zoom;
+    M.panX = sw >= ww ? Math.max(ww-sw, Math.min(0, M.panX)) : (ww-sw)/2;
+    M.panY = sh >= wh ? Math.max(wh-sh, Math.min(0, M.panY)) : (wh-sh)/2;
+  }
 }
 
 function applyMapTransform(){
@@ -5132,7 +5145,10 @@ function resetMapView(){
       const y0 = (1 - Math.log(Math.tan(latRadN) + 1/Math.cos(latRadN)) / Math.PI) / 2 * totalPx;
       const y1 = (1 - Math.log(Math.tan(latRadS) + 1/Math.cos(latRadS)) / Math.PI) / 2 * totalPx;
       const boundsW = x1 - x0, boundsH = y1 - y0;
-      M.zoom = Math.min(r.width / boundsW, r.height / boundsH) * 0.95;
+        // Content-Bounds für Clamping speichern
+      M.contentBounds = {x0, y0, x1, y1};
+      // Zoom: Content FÜLLT Viewport (kein Padding → kein schwarzer Rand)
+      M.zoom = Math.max(r.width / boundsW, r.height / boundsH);
       M.panX = (r.width  - boundsW * M.zoom)/2 - x0 * M.zoom;
       M.panY = (r.height - boundsH * M.zoom)/2 - y0 * M.zoom;
     } else {
@@ -5150,7 +5166,7 @@ function resetMapView(){
   if(!img || !img.naturalWidth) return;
   const fitX = r.width / img.naturalWidth;
   const fitY = r.height / img.naturalHeight;
-  M.zoom = Math.min(fitX, fitY) * 0.95;
+  M.zoom = Math.max(fitX, fitY);
   M.panX = (r.width - img.naturalWidth * M.zoom) / 2;
   M.panY = (r.height - img.naturalHeight * M.zoom) / 2;
   applyMapTransform();
@@ -5326,9 +5342,46 @@ function _mapScreenToImg(e){
   return { x: (sx - M.panX) / M.zoom, y: (sy - M.panY) / M.zoom };
 }
 
+function placeMapText(e){
+  const wrap=$('map-canvas-wrap'); if(!wrap)return;
+  const p=_mapScreenToImg(e);
+  const r=wrap.getBoundingClientRect();
+  const existing=document.getElementById('map-text-inp');if(existing)existing.remove();
+  const inp=document.createElement('div');
+  inp.id='map-text-inp';inp.contentEditable='true';
+  const fontSize=Math.max(12,(S.strokeWidth||2)*8);
+  inp.style.cssText=`position:absolute;z-index:25;left:${e.clientX-r.left}px;top:${e.clientY-r.top}px;`+
+    `min-width:8px;outline:none;color:${S.strokeColor||'#fff'};font-size:${fontSize}px;`+
+    `font-family:var(--mono);background:rgba(0,0,0,.25);border:1px dashed rgba(255,255,255,.4);`+
+    `padding:2px 5px;cursor:text;white-space:nowrap;border-radius:3px;`;
+  wrap.appendChild(inp);inp.focus();
+  function commitMapText(){
+    const text=inp.innerText.trim(); inp.remove();
+    if(!text)return;
+    const svg=$('map-draw-svg');if(!svg)return;
+    const el=document.createElementNS('http://www.w3.org/2000/svg','text');
+    el.setAttribute('x',p.x);el.setAttribute('y',p.y);
+    el.setAttribute('fill',S.strokeColor||'#ff6060');
+    el.setAttribute('font-size',fontSize/M.zoom);
+    el.setAttribute('font-family','monospace');
+    el.setAttribute('dominant-baseline','hanging');
+    el.textContent=text;
+    svg.appendChild(el);
+    S.mapDrawings=[...svg.children].filter(c=>c.tagName!=='defs').map(c=>c.outerHTML).join('');
+    scheduleSave();
+  }
+  inp.addEventListener('blur',commitMapText);
+  inp.addEventListener('keydown',ev=>{
+    if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();commitMapText();}
+    if(ev.key==='Escape'){inp.remove();}
+    ev.stopPropagation();
+  });
+}
+
 function startMapDraw(e){
   const svg = $('map-draw-svg');
   if(!svg) return;
+  if(S.tool==='text'){placeMapText(e);M.isDrawing=false;return;}
   const p = _mapScreenToImg(e);
   M.isDrawing = true;
   M._drawStart = p;
