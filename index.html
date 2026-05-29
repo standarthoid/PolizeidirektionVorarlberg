@@ -780,6 +780,11 @@ window._pdfjsReady = (function(){
 
 <!-- PRESENTATION HINT -->
 <div id="pres-hint" data-onclick="togglePresentation()" title="Präsentation beenden">✕</div>
+<button id="pres-side-toggle" data-onclick="togglePresSidePanel()" title="Werkzeuge ein-/ausblenden"
+  style="display:none;position:fixed;top:12px;right:52px;z-index:9500;
+  background:rgba(30,30,35,.85);border:1px solid rgba(255,255,255,.15);
+  border-radius:8px;padding:6px 10px;cursor:pointer;color:rgba(255,255,255,.7);
+  font-size:16px;backdrop-filter:blur(8px);line-height:1;">≡</button>
 
 <!-- ── KARTEN-MODUS (Vollbild) ────────────────────────────────────────────── -->
 <!-- Eigenständiges Overlay-Layer, separates Canvas + eigene Zeichen-SVG-Ebene.
@@ -4915,6 +4920,8 @@ function toggleMapMode(){
     // mini-ctrl + Toolbar zurücksetzen (map mode verlassen)
     const _mc2 = document.getElementById('mini-ctrl');
     if(_mc2){ _mc2.style.visibility = ''; _mc2.style.zIndex = ''; }
+    const _sp2 = document.getElementById('side-panel');
+    if(_sp2){ _sp2.style.visibility = ''; _sp2.style.zIndex = ''; }
     const _tb2 = document.getElementById('toolbar');
     if(_tb2){ _tb2.style.zIndex = ''; }
     _mapDrawToolbarVisible = false;
@@ -4929,9 +4936,11 @@ function toggleMapMode(){
     }catch(_){}
   } else {
     ov.style.display = 'flex';
-    // mini-ctrl (z-index:10003) beim Kartenmodus verstecken – liegt sonst über dem Overlay
+    // side-panel + mini-ctrl (z-index:10002/10003) beim Kartenmodus verstecken
     const _mc = document.getElementById('mini-ctrl');
     if(_mc) _mc.style.visibility = 'hidden';
+    const _sp = document.getElementById('side-panel');
+    if(_sp) _sp.style.visibility = 'hidden';
     initMapMode();
     // Vollbild aktivieren — wie Präsentationsmodus
     try{
@@ -4951,14 +4960,17 @@ function toggleMapDrawToolbar(){
   const mc = document.getElementById('mini-ctrl');
   const btn = document.getElementById('map-tools-toggle-btn');
   _mapDrawToolbarVisible = !_mapDrawToolbarVisible;
+  const sp = document.getElementById('side-panel');
   if(_mapDrawToolbarVisible){
     // Über das Overlay heben (z-index > 8500)
     if(tb){ tb.style.zIndex = '9000'; tb.classList.remove('hidden'); }
     if(mc){ mc.style.visibility = 'visible'; mc.style.zIndex = '9001'; }
+    if(sp){ sp.style.visibility = 'visible'; sp.style.zIndex = '9002'; }
     if(btn){ btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)'; }
   } else {
     if(tb){ tb.style.zIndex = ''; }
     if(mc){ mc.style.visibility = 'hidden'; mc.style.zIndex = ''; }
+    if(sp){ sp.style.visibility = 'hidden'; sp.style.zIndex = ''; }
     if(btn){ btn.style.borderColor = ''; btn.style.color = ''; }
   }
 }
@@ -5044,7 +5056,26 @@ function initMapMode(){
   bindMapHandlers();
 }
 
+function _clampMapPan(){
+  // Verhindert schwarze Ränder: Pan-Werte so begrenzen, dass die Karte immer den Viewport füllt
+  const wrap = $('map-canvas-wrap');
+  if(!wrap) return;
+  const ww = wrap.clientWidth, wh = wrap.clientHeight;
+  let cw, ch;
+  if(M.source === 'mbtiles'){ cw = ch = M.mbWorldPx; }
+  else { const img = $('map-image'); cw = img ? img.naturalWidth : 0; ch = img ? img.naturalHeight : 0; }
+  if(!cw || !ch) return;
+  const sw = cw * M.zoom, sh = ch * M.zoom;
+  // Minimum-Zoom: Karte muss Viewport in BEIDEN Dimensionen füllen
+  const minZoom = Math.max(ww / cw, wh / ch);
+  if(M.zoom < minZoom){ M.zoom = minZoom; }
+  const sw2 = cw * M.zoom, sh2 = ch * M.zoom;
+  M.panX = sw2 >= ww ? Math.max(ww - sw2, Math.min(0, M.panX)) : (ww - sw2) / 2;
+  M.panY = sh2 >= wh ? Math.max(wh - sh2, Math.min(0, M.panY)) : (wh - sh2) / 2;
+}
+
 function applyMapTransform(){
+  _clampMapPan();
   const tr = $('map-transform');
   if(tr) tr.style.transform = `translate(${M.panX}px, ${M.panY}px) scale(${M.zoom})`;
   const z = $('map-zoom-display');
@@ -5444,6 +5475,12 @@ function togglePresentation(){
           invoke('plugin:window|set_fullscreen',{value:true}).catch(()=>{});
           invoke('plugin:window|set_decorations',{value:false}).catch(()=>{});
         }
+        // Zusätzlich über window API (robuster auf Windows)
+        try{
+          const win=window.__TAURI__?.window?.getCurrent?.()
+            ||window.__TAURI__?.window?.getCurrentWindow?.();
+          if(win){ win.setFullscreen(true).catch(()=>{}); win.setDecorations(false).catch(()=>{}); }
+        }catch(_){}
       } else { document.documentElement.requestFullscreen?.().catch(()=>{}); }
     }catch(_){}
   } else {
@@ -5454,11 +5491,33 @@ function togglePresentation(){
       if(window.__TAURI__){
         const invoke=(window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke
           ||(window.__TAURI__?.tauri?.invoke);
-        if(invoke) invoke('plugin:window|set_fullscreen',{value:false}).catch(()=>{});
+        if(invoke){
+          invoke('plugin:window|set_fullscreen',{value:false}).catch(()=>{});
+          invoke('plugin:window|set_decorations',{value:true}).catch(()=>{});
+        }
+        try{
+          const win=window.__TAURI__?.window?.getCurrent?.()
+            ||window.__TAURI__?.window?.getCurrentWindow?.();
+          if(win){ win.setFullscreen(false).catch(()=>{}); win.setDecorations(true).catch(()=>{}); }
+        }catch(_){}
       } else { document.fullscreenElement&&document.exitFullscreen(); }
     }catch(_){}
   }
   $('present-btn')?.classList.toggle('active',S.presentation);
+  // Burger-Button im Präsentationsmodus ein-/ausblenden
+  const psb = document.getElementById('pres-side-toggle');
+  if(psb) psb.style.display = S.presentation ? 'flex' : 'none';
+}
+let _presSidePanelVisible = true;
+function togglePresSidePanel(){
+  const sp = document.getElementById('side-panel');
+  const mc = document.getElementById('mini-ctrl');
+  _presSidePanelVisible = !_presSidePanelVisible;
+  const v = _presSidePanelVisible;
+  if(sp){ sp.style.visibility = v ? '' : 'hidden'; }
+  if(mc){ mc.style.visibility = v ? '' : 'hidden'; }
+  const btn = document.getElementById('pres-side-toggle');
+  if(btn){ btn.style.opacity = v ? '1' : '0.4'; btn.style.borderColor = v ? 'var(--accent)' : ''; }
 }
 document.addEventListener('fullscreenchange',()=>{
   if(!document.fullscreenElement&&S.presentation){
