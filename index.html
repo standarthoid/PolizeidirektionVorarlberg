@@ -1262,6 +1262,11 @@ strokeAttrs = function(){
 let isPanning=false,panStart=null;
 // ── Unified Pointer/Touch/Stylus + Mouse handler (Canvas-Ebene) ──
 function _onCanvasPointerDown(e){
+  // Kartenmodus aktiv → Board-Events komplett blockieren.
+  // Events auf dem Map-Overlay passieren sonst die Bounds-Prüfung und landen
+  // fälschlicherweise im Board-Zeichenhandler.
+  const _mo=document.getElementById('map-overlay');
+  if(_mo && _mo.style.display!=='none') return;
   // UI-Elemente nicht unterbrechen — buttons, toolbar, panels bekommen Events zuerst
   if(e.target.closest('#header,#toolbar,#side-panel,#mini-ctrl,#layer-panel,#board-panel,#ctx-menu,#modal-overlay,#viewer-overlay,.note-opt-panel,.folder-window,.hdr-btn,.tool-btn,.side-btn,.mini-btn')) return;
   const ne = normEvent(e);
@@ -1498,6 +1503,9 @@ window.addEventListener('pointerdown', function(e){
 // Header, Toolbar, Datei-Inputs). Sonst landen Stale-Pointer in _pointers wenn
 // ein Systemdialog (Dateiauswahl) das pointerup abfängt.
 window.addEventListener('pointerdown', function _globalPinchSetup(e){
+  // Kartenmodus → kein Board-Pinch-Tracking
+  const _mog=document.getElementById('map-overlay');
+  if(_mog && _mog.style.display!=='none') return;
   // Board gesperrt → kein Tracking
   if(document.body.classList.contains('board-locked')) return;
   if(e.pointerType==='mouse') return;
