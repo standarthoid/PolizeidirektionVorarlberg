@@ -4934,7 +4934,7 @@ function toggleMapMode(){
     const _sp2 = document.getElementById('side-panel');
     if(_sp2){ _sp2.style.visibility = ''; _sp2.style.zIndex = ''; }
     const _tb2 = document.getElementById('toolbar');
-    if(_tb2){ _tb2.style.zIndex = ''; }
+    if(_tb2){ _tb2.style.zIndex = ''; _tb2.classList.remove('hidden'); }
     _mapDrawToolbarVisible = false;
     _mapHeaderVisible = false;
     // map-mode-toolbar wieder einblenden (für nächsten Karten-Einstieg)
@@ -4963,7 +4963,10 @@ function toggleMapMode(){
     const _mc = document.getElementById('mini-ctrl');
     if(_mc){ _mc.style.visibility='hidden'; _mc.dataset.mapHidden='1'; }
     const _sp = document.getElementById('side-panel');
-    if(_sp){ _sp.style.visibility='hidden'; _sp.dataset.mapHidden='1'; }
+    if(_sp){ _sp.style.visibility='visible'; _sp.style.zIndex='9002'; _sp.dataset.mapHidden='1'; }
+    // Toolbar sofort über das Overlay heben (z-index:1000 < Overlay:8500)
+    const _tb0 = document.getElementById('toolbar');
+    if(_tb0){ _tb0.style.zIndex='9000'; _tb0.classList.remove('hidden'); }
     initMapMode();
     // Vollbild aktivieren — wie Präsentationsmodus
     try{
@@ -4989,9 +4992,10 @@ function toggleMapAllToolbars(){
   const zc  = document.getElementById('map-zoom-ctrl');
   const btn = document.getElementById('map-master-toggle');
   if(mmt) mmt.style.display = show ? 'flex' : 'none';
-  if(tb)  tb.style.zIndex   = show ? '9000' : '';
-  if(sp){ sp.style.visibility = show && _mapDrawToolbarVisible ? 'visible' : 'hidden'; }
-  if(mc){ mc.style.visibility = show && _mapDrawToolbarVisible ? 'visible' : 'hidden'; }
+  // Toolbar: z-index boosten UND hidden-Klasse steuern
+  if(tb){ tb.style.zIndex = show ? '9000' : ''; if(show) tb.classList.remove('hidden'); }
+  if(sp){ sp.style.visibility = show ? 'visible' : 'hidden'; }
+  // mini-ctrl bleibt immer hidden (würde map-zoom-ctrl überlagern)
   // map-zoom-ctrl bleibt immer sichtbar
   if(btn){ btn.style.opacity = show ? '1' : '0.5'; btn.title = show ? 'Alle Werkzeuge ausblenden' : 'Alle Werkzeuge einblenden'; }
 }
