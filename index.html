@@ -4951,13 +4951,7 @@ function toggleMapMode(){
     // zoom-ctrl wiederherstellen
     const _zc2 = document.getElementById('map-zoom-ctrl');
     if(_zc2) _zc2.style.display = '';
-    // Tauri-nativen Fullscreen UND Browser-Fullscreen beenden
-    try{
-      if(window.__TAURI__){
-        const _inv=(window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke||(window.__TAURI__?.tauri?.invoke);
-        if(_inv) _inv('plugin:window|set_fullscreen',{value:false}).catch(()=>{});
-      } else { document.exitFullscreen?.().catch(()=>{}); }
-    }catch(_){}
+    // set_fullscreen wurde beim Betreten nicht gesetzt – kein Reset nötig
   } else {
     ov.style.display = 'flex';
     // Master-Toggle-Button einblenden
@@ -4976,14 +4970,8 @@ function toggleMapMode(){
     const _tb0 = document.getElementById('toolbar');
     if(_tb0){ _tb0.style.zIndex='9000'; _tb0.classList.remove('hidden'); }
     initMapMode();
-    // Vollbild aktivieren — wie Präsentationsmodus
-    try{
-      if(window.__TAURI__){
-        const invoke = (window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke
-          || (window.__TAURI__?.tauri?.invoke);
-        if(invoke) invoke('plugin:window|set_fullscreen',{value:true}).catch(()=>{});
-      } else { document.documentElement.requestFullscreen?.().catch(()=>{}); }
-    }catch(_){}
+    // KEIN set_fullscreen im Kartenmodus: natives Vollbild blockiert Stift-Events
+    // auf Windows (Windows Ink interceptet vor WebView2). CSS-Overlay reicht.
   }
 }
 
