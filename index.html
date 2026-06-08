@@ -341,7 +341,7 @@ body.board-locked #side-panel{
 #stroke-picker{
   display:none;position:fixed;bottom:84px;left:50%;transform:translateX(-50%);
   background:var(--surface);border:1px solid var(--border-hi);border-radius:12px;
-  padding:11px 13px;z-index:1001;flex-direction:column;gap:9px;
+  padding:11px 13px;z-index:9200;flex-direction:column;gap:9px;
   box-shadow:var(--shadow);min-width:255px;touch-action:auto;
 }
 #stroke-picker.open{display:flex;}
@@ -784,16 +784,17 @@ window._pdfjsReady = (function(){
 
 <!-- Karten-Master-Toggle: fixer ≡-Button oben rechts, sichtbar nur im Kartenmodus -->
 <button id="map-master-toggle" data-onclick="toggleMapAllToolbars()" title="Alle Werkzeuge ein-/ausblenden"
-  style="display:none;position:fixed;top:10px;right:10px;z-index:10001;
+  style="display:none;position:fixed;top:14px;right:14px;z-index:10001;
   background:var(--surface);border:1px solid var(--border-hi);border-radius:8px;
   padding:6px 10px;cursor:pointer;color:var(--text);font-size:16px;
   align-items:center;justify-content:center;line-height:1;
   box-shadow:0 2px 12px rgba(0,0,0,.5);backdrop-filter:blur(8px);">≡</button>
 <button id="pres-side-toggle" data-onclick="togglePresSidePanel()" title="Werkzeuge ein-/ausblenden"
-  style="display:none;position:fixed;top:12px;right:52px;z-index:9500;
-  background:rgba(30,30,35,.85);border:1px solid rgba(255,255,255,.15);
-  border-radius:8px;padding:6px 10px;cursor:pointer;color:rgba(255,255,255,.7);
-  font-size:16px;backdrop-filter:blur(8px);line-height:1;">≡</button>
+  style="display:none;position:fixed;top:14px;right:14px;z-index:9500;
+  background:var(--surface);border:1px solid var(--border-hi);
+  border-radius:8px;padding:6px 10px;cursor:pointer;color:var(--text);
+  font-size:16px;backdrop-filter:blur(8px);line-height:1;
+  box-shadow:0 2px 12px rgba(0,0,0,.5);">≡</button>
 
 <!-- ── KARTEN-MODUS (Vollbild) ────────────────────────────────────────────── -->
 <!-- Eigenständiges Overlay-Layer, separates Canvas + eigene Zeichen-SVG-Ebene.
@@ -830,7 +831,7 @@ window._pdfjsReady = (function(){
     </div>
   </div>
 
-  <div id="map-mode-toolbar" style="position:absolute;top:10px;right:52px;display:flex;gap:8px;z-index:11;align-items:center;">
+  <div id="map-mode-toolbar" style="position:absolute;top:14px;right:58px;display:flex;gap:8px;z-index:11;align-items:center;">
     <button class="hdr-btn" data-onclick="window._openFileInput('map-upload-input','image/*',false,handleMapUpload)" title="PNG/JPEG-Karte laden" style="display:inline-flex;align-items:center;gap:5px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       PNG
@@ -856,10 +857,9 @@ window._pdfjsReady = (function(){
   </div>
 
   <!-- Zoom-Anzeige + Bedienung unten rechts -->
-  <div id="map-zoom-ctrl" style="position:absolute;bottom:14px;right:14px;display:flex;gap:6px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px;z-index:10;">
-    <button class="mini-btn" data-onclick="mapZoomBy(0.8)" style="font-size:18px;">−</button>
-    <span id="map-zoom-display" style="font-size:11px;font-family:var(--mono);color:var(--text-dim);min-width:50px;text-align:center;">100%</span>
+  <div id="map-zoom-ctrl" style="position:absolute;bottom:14px;right:14px;display:flex;flex-direction:column;gap:3px;z-index:10;">
     <button class="mini-btn" data-onclick="mapZoomBy(1.2)" style="font-size:18px;">+</button>
+    <button class="mini-btn" data-onclick="mapZoomBy(0.8)" style="font-size:18px;">−</button>
   </div>
 </div>
 
@@ -4951,7 +4951,13 @@ function toggleMapMode(){
     // zoom-ctrl wiederherstellen
     const _zc2 = document.getElementById('map-zoom-ctrl');
     if(_zc2) _zc2.style.display = '';
-    // set_fullscreen wurde beim Betreten nicht gesetzt – kein Reset nötig
+    // Tauri-nativen Fullscreen UND Browser-Fullscreen beenden
+    try{
+      if(window.__TAURI__){
+        const _inv=(window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke||(window.__TAURI__?.tauri?.invoke);
+        if(_inv) _inv('plugin:window|set_fullscreen',{value:false}).catch(()=>{});
+      } else { document.exitFullscreen?.().catch(()=>{}); }
+    }catch(_){}
   } else {
     ov.style.display = 'flex';
     // Master-Toggle-Button einblenden
@@ -4970,8 +4976,14 @@ function toggleMapMode(){
     const _tb0 = document.getElementById('toolbar');
     if(_tb0){ _tb0.style.zIndex='9000'; _tb0.classList.remove('hidden'); }
     initMapMode();
-    // KEIN set_fullscreen im Kartenmodus: natives Vollbild blockiert Stift-Events
-    // auf Windows (Windows Ink interceptet vor WebView2). CSS-Overlay reicht.
+    // Vollbild aktivieren — wie Präsentationsmodus
+    try{
+      if(window.__TAURI__){
+        const invoke = (window.__TAURI_INTERNALS__||window.__TAURI__)?.core?.invoke
+          || (window.__TAURI__?.tauri?.invoke);
+        if(invoke) invoke('plugin:window|set_fullscreen',{value:true}).catch(()=>{});
+      } else { document.documentElement.requestFullscreen?.().catch(()=>{}); }
+    }catch(_){}
   }
 }
 
@@ -5620,13 +5632,15 @@ function togglePresentation(){
 }
 let _presSidePanelVisible = true;
 function togglePresSidePanel(){
-  const sp = document.getElementById('side-panel');
-  const mc = document.getElementById('mini-ctrl');
+  const sp  = document.getElementById('side-panel');
+  const mc  = document.getElementById('mini-ctrl');
+  const tb  = document.getElementById('toolbar');
+  const btn = document.getElementById('pres-side-toggle');
   _presSidePanelVisible = !_presSidePanelVisible;
   const v = _presSidePanelVisible;
-  if(sp){ sp.style.visibility = v ? '' : 'hidden'; }
-  if(mc){ mc.style.visibility = v ? '' : 'hidden'; }
-  const btn = document.getElementById('pres-side-toggle');
+  if(sp)  sp.style.visibility = v ? '' : 'hidden';
+  if(mc)  mc.style.visibility = v ? '' : 'hidden';
+  if(tb){ if(v){ tb.classList.remove('hidden'); } else { tb.classList.add('hidden'); } }
   if(btn){ btn.style.opacity = v ? '1' : '0.4'; btn.style.borderColor = v ? 'var(--accent)' : ''; }
 }
 document.addEventListener('fullscreenchange',()=>{
