@@ -341,7 +341,7 @@ body.board-locked #side-panel{
 #stroke-picker{
   display:none;position:fixed;bottom:84px;left:50%;transform:translateX(-50%);
   background:var(--surface);border:1px solid var(--border-hi);border-radius:12px;
-  padding:11px 13px;z-index:9200;flex-direction:column;gap:9px;
+  padding:11px 13px;z-index:1001;flex-direction:column;gap:9px;
   box-shadow:var(--shadow);min-width:255px;touch-action:auto;
 }
 #stroke-picker.open{display:flex;}
@@ -784,17 +784,16 @@ window._pdfjsReady = (function(){
 
 <!-- Karten-Master-Toggle: fixer ≡-Button oben rechts, sichtbar nur im Kartenmodus -->
 <button id="map-master-toggle" data-onclick="toggleMapAllToolbars()" title="Alle Werkzeuge ein-/ausblenden"
-  style="display:none;position:fixed;top:14px;right:14px;z-index:10001;
+  style="display:none;position:fixed;top:10px;right:10px;z-index:10001;
   background:var(--surface);border:1px solid var(--border-hi);border-radius:8px;
   padding:6px 10px;cursor:pointer;color:var(--text);font-size:16px;
   align-items:center;justify-content:center;line-height:1;
   box-shadow:0 2px 12px rgba(0,0,0,.5);backdrop-filter:blur(8px);">≡</button>
 <button id="pres-side-toggle" data-onclick="togglePresSidePanel()" title="Werkzeuge ein-/ausblenden"
-  style="display:none;position:fixed;top:14px;right:14px;z-index:9500;
-  background:var(--surface);border:1px solid var(--border-hi);
-  border-radius:8px;padding:6px 10px;cursor:pointer;color:var(--text);
-  font-size:16px;backdrop-filter:blur(8px);line-height:1;
-  box-shadow:0 2px 12px rgba(0,0,0,.5);">≡</button>
+  style="display:none;position:fixed;top:12px;right:52px;z-index:9500;
+  background:rgba(30,30,35,.85);border:1px solid rgba(255,255,255,.15);
+  border-radius:8px;padding:6px 10px;cursor:pointer;color:rgba(255,255,255,.7);
+  font-size:16px;backdrop-filter:blur(8px);line-height:1;">≡</button>
 
 <!-- ── KARTEN-MODUS (Vollbild) ────────────────────────────────────────────── -->
 <!-- Eigenständiges Overlay-Layer, separates Canvas + eigene Zeichen-SVG-Ebene.
@@ -807,7 +806,7 @@ window._pdfjsReady = (function(){
       <img id="map-image" alt="Karte" style="display:block;max-width:none;user-select:none;-webkit-user-drag:none;pointer-events:none;">
       <!-- MBTiles-Container: Tiles werden hier per JS hinzugefügt. Liegt ÜBER dem PNG -->
       <div id="map-tiles" style="position:absolute;left:0;top:0;display:none;"></div>
-      <svg id="map-draw-svg" xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;">
+      <svg id="map-draw-svg" xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;"><style>/* Strichbreite immer in Screen-Pixeln – unabhängig vom Karten-Zoom */#map-draw-svg path,#map-draw-svg line,#map-draw-svg rect,#map-draw-svg ellipse,#map-draw-svg text{vector-effect:non-scaling-stroke;}</style>
         <defs></defs>
       </svg>
     </div>
@@ -831,7 +830,7 @@ window._pdfjsReady = (function(){
     </div>
   </div>
 
-  <div id="map-mode-toolbar" style="position:absolute;top:14px;right:58px;display:flex;gap:8px;z-index:11;align-items:center;">
+  <div id="map-mode-toolbar" style="position:absolute;top:10px;right:52px;display:flex;gap:8px;z-index:11;align-items:center;">
     <button class="hdr-btn" data-onclick="window._openFileInput('map-upload-input','image/*',false,handleMapUpload)" title="PNG/JPEG-Karte laden" style="display:inline-flex;align-items:center;gap:5px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       PNG
@@ -857,9 +856,10 @@ window._pdfjsReady = (function(){
   </div>
 
   <!-- Zoom-Anzeige + Bedienung unten rechts -->
-  <div id="map-zoom-ctrl" style="position:absolute;bottom:14px;right:14px;display:flex;flex-direction:column;gap:3px;z-index:10;">
-    <button class="mini-btn" data-onclick="mapZoomBy(1.2)" style="font-size:18px;">+</button>
+  <div id="map-zoom-ctrl" style="position:absolute;bottom:14px;right:14px;display:flex;gap:6px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px;z-index:10;">
     <button class="mini-btn" data-onclick="mapZoomBy(0.8)" style="font-size:18px;">−</button>
+    <span id="map-zoom-display" style="font-size:11px;font-family:var(--mono);color:var(--text-dim);min-width:50px;text-align:center;">100%</span>
+    <button class="mini-btn" data-onclick="mapZoomBy(1.2)" style="font-size:18px;">+</button>
   </div>
 </div>
 
@@ -5429,7 +5429,7 @@ function placeMapText(e){
   const existing=document.getElementById('map-text-inp');if(existing)existing.remove();
   const inp=document.createElement('div');
   inp.id='map-text-inp';inp.contentEditable='true';
-  const fontSize=Math.max(12,(S.strokeWidth||2)*8);
+  const fontSize=Math.max(16,(S.strokeWidth||3)*10);  // in Screen-Pixeln
   inp.style.cssText=`position:absolute;z-index:25;left:${e.clientX-r.left}px;top:${e.clientY-r.top}px;`+
     `min-width:8px;outline:none;color:${S.strokeColor||'#fff'};font-size:${fontSize}px;`+
     `font-family:var(--mono);background:rgba(0,0,0,.25);border:1px dashed rgba(255,255,255,.4);`+
@@ -5466,7 +5466,8 @@ function startMapDraw(e){
   M.isDrawing = true;
   M._drawStart = p;
   const stroke = S.strokeColor || '#ff6060';
-  const sw = (S.strokeWidth || 2);
+  // sw in Screen-Pixeln dank vector-effect:non-scaling-stroke
+  const sw = Math.max(3, S.strokeWidth || 3);
   let el;
   if(S.tool === 'pen'){
     el = document.createElementNS('http://www.w3.org/2000/svg','path');
@@ -5632,15 +5633,13 @@ function togglePresentation(){
 }
 let _presSidePanelVisible = true;
 function togglePresSidePanel(){
-  const sp  = document.getElementById('side-panel');
-  const mc  = document.getElementById('mini-ctrl');
-  const tb  = document.getElementById('toolbar');
-  const btn = document.getElementById('pres-side-toggle');
+  const sp = document.getElementById('side-panel');
+  const mc = document.getElementById('mini-ctrl');
   _presSidePanelVisible = !_presSidePanelVisible;
   const v = _presSidePanelVisible;
-  if(sp)  sp.style.visibility = v ? '' : 'hidden';
-  if(mc)  mc.style.visibility = v ? '' : 'hidden';
-  if(tb){ if(v){ tb.classList.remove('hidden'); } else { tb.classList.add('hidden'); } }
+  if(sp){ sp.style.visibility = v ? '' : 'hidden'; }
+  if(mc){ mc.style.visibility = v ? '' : 'hidden'; }
+  const btn = document.getElementById('pres-side-toggle');
   if(btn){ btn.style.opacity = v ? '1' : '0.4'; btn.style.borderColor = v ? 'var(--accent)' : ''; }
 }
 document.addEventListener('fullscreenchange',()=>{
