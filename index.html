@@ -341,7 +341,7 @@ body.board-locked #side-panel{
 #stroke-picker{
   display:none;position:fixed;bottom:84px;left:50%;transform:translateX(-50%);
   background:var(--surface);border:1px solid var(--border-hi);border-radius:12px;
-  padding:11px 13px;z-index:1001;flex-direction:column;gap:9px;
+  padding:11px 13px;z-index:9500;flex-direction:column;gap:9px;
   box-shadow:var(--shadow);min-width:255px;touch-action:auto;
 }
 #stroke-picker.open{display:flex;}
@@ -5429,7 +5429,7 @@ function placeMapText(e){
   const existing=document.getElementById('map-text-inp');if(existing)existing.remove();
   const inp=document.createElement('div');
   inp.id='map-text-inp';inp.contentEditable='true';
-  const fontSize=Math.max(16,(S.strokeWidth||3)*10);  // in Screen-Pixeln
+  const fontSize=Math.max(16,(S.strokeSize||3)*10);  // in Screen-Pixeln
   inp.style.cssText=`position:absolute;z-index:25;left:${e.clientX-r.left}px;top:${e.clientY-r.top}px;`+
     `min-width:8px;outline:none;color:${S.strokeColor||'#fff'};font-size:${fontSize}px;`+
     `font-family:var(--mono);background:rgba(0,0,0,.25);border:1px dashed rgba(255,255,255,.4);`+
@@ -5467,7 +5467,7 @@ function startMapDraw(e){
   M._drawStart = p;
   const stroke = S.strokeColor || '#ff6060';
   // sw in Screen-Pixeln dank vector-effect:non-scaling-stroke
-  const sw = Math.max(3, S.strokeWidth || 3);
+  const sw = Math.max(8, S.strokeSize || 8);
   let el;
   if(S.tool === 'pen'){
     el = document.createElementNS('http://www.w3.org/2000/svg','path');
