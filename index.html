@@ -790,10 +790,11 @@ window._pdfjsReady = (function(){
   align-items:center;justify-content:center;line-height:1;
   box-shadow:0 2px 12px rgba(0,0,0,.5);backdrop-filter:blur(8px);">≡</button>
 <button id="pres-side-toggle" data-onclick="togglePresSidePanel()" title="Werkzeuge ein-/ausblenden"
-  style="display:none;position:fixed;top:12px;right:52px;z-index:9500;
-  background:rgba(30,30,35,.85);border:1px solid rgba(255,255,255,.15);
-  border-radius:8px;padding:6px 10px;cursor:pointer;color:rgba(255,255,255,.7);
-  font-size:16px;backdrop-filter:blur(8px);line-height:1;">≡</button>
+  style="display:none;position:fixed;top:10px;right:10px;z-index:9500;
+  background:var(--surface);border:1px solid var(--border-hi);border-radius:8px;
+  padding:6px 10px;cursor:pointer;color:var(--text);font-size:16px;
+  align-items:center;justify-content:center;line-height:1;
+  box-shadow:0 2px 12px rgba(0,0,0,.5);backdrop-filter:blur(8px);">≡</button>
 
 <!-- ── KARTEN-MODUS (Vollbild) ────────────────────────────────────────────── -->
 <!-- Eigenständiges Overlay-Layer, separates Canvas + eigene Zeichen-SVG-Ebene.
@@ -856,10 +857,9 @@ window._pdfjsReady = (function(){
   </div>
 
   <!-- Zoom-Anzeige + Bedienung unten rechts -->
-  <div id="map-zoom-ctrl" style="position:absolute;bottom:14px;right:14px;display:flex;gap:6px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px;z-index:10;">
-    <button class="mini-btn" data-onclick="mapZoomBy(0.8)" style="font-size:18px;">−</button>
-    <span id="map-zoom-display" style="font-size:11px;font-family:var(--mono);color:var(--text-dim);min-width:50px;text-align:center;">100%</span>
-    <button class="mini-btn" data-onclick="mapZoomBy(1.2)" style="font-size:18px;">+</button>
+  <div id="map-zoom-ctrl" style="position:fixed;right:12px;bottom:22px;display:flex;flex-direction:column;gap:3px;z-index:10003;touch-action:auto;">
+    <button class="mini-btn" data-onclick="mapZoomBy(1.2)">+</button>
+    <button class="mini-btn" data-onclick="mapZoomBy(0.8)">−</button>
   </div>
 </div>
 
@@ -5634,11 +5634,11 @@ function togglePresentation(){
 let _presSidePanelVisible = true;
 function togglePresSidePanel(){
   const sp = document.getElementById('side-panel');
-  const mc = document.getElementById('mini-ctrl');
+  const tb = document.getElementById('toolbar');
   _presSidePanelVisible = !_presSidePanelVisible;
   const v = _presSidePanelVisible;
   if(sp){ sp.style.visibility = v ? '' : 'hidden'; }
-  if(mc){ mc.style.visibility = v ? '' : 'hidden'; }
+  if(tb){ tb.classList.toggle('hidden', !v); }
   const btn = document.getElementById('pres-side-toggle');
   if(btn){ btn.style.opacity = v ? '1' : '0.4'; btn.style.borderColor = v ? 'var(--accent)' : ''; }
 }
