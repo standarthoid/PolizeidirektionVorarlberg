@@ -2169,6 +2169,9 @@ function setStrokeFill(v){S.strokeFill=v;applyStrokeToSelected();}
 function setDash(v){S.strokeDash=v;updateDashBtns();applyStrokeToSelected();}
 function updateDashBtns(){[{id:'dash-solid',v:''},{id:'dash-dashed',v:'dash'},{id:'dash-dotted',v:'dot'}].forEach(({id,v})=>$(id)?.classList.toggle('active',S.strokeDash===v));}
 function toggleStrokePicker(e){e?.stopPropagation();$('stroke-picker').classList.toggle('open');}
+// Prevent long-press context menu on buttons that had touch issues
+// UND: direkte capture-Phase Handler für Buttons die im Kartenmodus durch
+// wrap.setPointerCapture() oder board-locked Guards blockiert werden.
 (function(){
   // Diese Buttons bekommen direkte capture-pointerdown/up Handler,
   // damit sie unabhängig von setPointerCapture und board-locked Guards funktionieren.
@@ -2195,6 +2198,7 @@ function toggleStrokePicker(e){e?.stopPropagation();$('stroke-picker').classList
       }
     },{capture:true});
   });
+  // Also prevent globally on bp-btn and tool-btn classes
   document.addEventListener('contextmenu',function(e){
     if(e.target.closest('.bp-btn,.tool-btn')) { e.preventDefault(); e.stopPropagation(); }
   },{capture:true});
@@ -5578,6 +5582,7 @@ function startMapDraw(e){
     M.isDrawing = false;
     return;
   }
+  // Apply dash style from stroke picker
   if(S.strokeDash === 'dash') el.setAttribute('stroke-dasharray', sw*3+' '+sw*1.5);
   else if(S.strokeDash === 'dot') el.setAttribute('stroke-dasharray', sw*0.1+' '+sw*2);
   el.setAttribute('vector-effect','non-scaling-stroke');
