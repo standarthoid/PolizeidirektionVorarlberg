@@ -475,8 +475,8 @@ body.board-locked #side-panel{
 .bp-act { width:24px;height:24px;border-radius:5px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:all .12s; }
 .bp-act:hover { background:var(--surface2);color:var(--text); }
 .bp-act.del:hover { background:rgba(255,60,60,.15);color:#ff6060; }
-#bp-footer { padding:10px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px;flex-shrink:0; }
-.bp-btn { width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text-dim);cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px; }
+#bp-footer { padding:10px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px;flex-shrink:0;touch-action:manipulation; }
+.bp-btn { width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text-dim);cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px;touch-action:manipulation;min-height:40px;user-select:none; }
 .bp-btn:hover { border-color:var(--accent);color:var(--accent); }
 .bp-btn.primary { background:var(--accent);color:#000;border-color:var(--accent);font-weight:600; }
 .bp-btn.primary:hover { opacity:.88; }
@@ -2156,8 +2156,19 @@ $('sp-custom').addEventListener('input',e=>{S.strokeColor=e.target.value;documen
 });
 function setStrokeFill(v){S.strokeFill=v;applyStrokeToSelected();}
 function setDash(v){S.strokeDash=v;updateDashBtns();applyStrokeToSelected();}
-function updateDashBtns(){[{id:'dash-solid',v:''},{id:'dash-dashed',v:'8,5'},{id:'dash-dotted',v:'2,5'}].forEach(({id,v})=>$(id)?.classList.toggle('active',S.strokeDash===v));}
+function updateDashBtns(){[{id:'dash-solid',v:''},{id:'dash-dashed',v:'dash'},{id:'dash-dotted',v:'dot'}].forEach(({id,v})=>$(id)?.classList.toggle('active',S.strokeDash===v));}
 function toggleStrokePicker(e){e?.stopPropagation();$('stroke-picker').classList.toggle('open');}
+(function(){
+  ['btn-clear-cache','btn-add-folder'].forEach(function(id){
+    document.addEventListener('DOMContentLoaded',function(){
+      var el=document.getElementById(id);
+      if(el) el.addEventListener('contextmenu',function(e){e.preventDefault();e.stopPropagation();});
+    });
+  });
+  document.addEventListener('contextmenu',function(e){
+    if(e.target.closest('.bp-btn,.tool-btn')) { e.preventDefault(); e.stopPropagation(); }
+  },{capture:true});
+})();
 document.addEventListener('click',e=>{
   if(!$('stroke-picker').contains(e.target)&&!e.target.closest?.('#stroke-settings-btn'))
     $('stroke-picker').classList.remove('open');
@@ -5531,6 +5542,9 @@ function startMapDraw(e){
     M.isDrawing = false;
     return;
   }
+  if(S.strokeDash === 'dash') el.setAttribute('stroke-dasharray', sw*3+' '+sw*1.5);
+  else if(S.strokeDash === 'dot') el.setAttribute('stroke-dasharray', sw*0.1+' '+sw*2);
+  el.setAttribute('vector-effect','non-scaling-stroke');
   svg.appendChild(el);
   M.drawEl = el;
 }
