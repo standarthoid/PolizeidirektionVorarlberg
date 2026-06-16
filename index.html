@@ -329,7 +329,7 @@ body.board-locked #map-master-toggle{
   pointer-events: auto !important;
   opacity: 1 !important;
   filter: none !important;
-  z-index: 999993;
+  z-index: 999993 !important;
 }
 .tool-btn{width:38px;height:38px;border-radius:8px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s;position:relative;flex-shrink:0;}
 .tool-btn:hover{background:var(--surface2);color:var(--text);}
@@ -4481,7 +4481,7 @@ function deleteItem(id){
   $('item-'+id)?.remove();
   S.selectedIds.delete(id);
   if(_folderWindows[id]){_folderWindows[id].remove();delete _folderWindows[id];}
-  renderLayerList();scheduleSave();
+  renderLayerList();saveNow(); // sofort speichern damit gelöschte Items nicht wieder auftauchen
 }
 function clearSelected(){[...S.selectedIds].forEach(id=>deleteItem(id));}
 
@@ -6883,22 +6883,47 @@ async function openBoardFromFile(){
       showInfo('Datei enthält kein gültiges Board.');
       return;
     }
-    // Board rendern, dann große Mediendaten in IDB auslagern, erst dann localStorage schreiben
     const id = 'board_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
     const imported = {...boardData, id, savedAt: Date.now()};
-    restoreBoard(imported);
-    captureBoardAsync().then(({board})=>{
-      const store2 = loadStorage() || {boards:[], activeId:null};
-      store2.boards.push({...board, id});
-      store2.activeId = id;
-      if(!saveStorage(store2)){
-        // Letzter Versuch: ohne große bgImage-Daten
-        const stripped = {...board, id, bgImage: board.bgImage?.startsWith('idb:') ? board.bgImage : null};
-        store2.boards[store2.boards.length-1] = stripped;
-        saveStorage(store2);
+
+    // Mediendaten VOR dem Speichern in IDB auslagern (verhindert QuotaExceededError)
+    // und sofort in localStorage sichern — KEIN captureBoardAsync() nach restoreBoard()
+    // da S.items zu diesem Zeitpunkt noch leer ist (restoreBoard lädt async).
+    const writes = [];
+    const strippedItems = (imported.items||[]).map(item=>{
+      const copy = {...item};
+      if(copy.src && copy.src.startsWith('data:')){
+        const k = 'idb:i'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+        writes.push(idbPut(k, copy.src)); copy.src = k;
+      } else if(copy.src && copy.src.startsWith('idb:')){ /* already in idb */ }
+      if(copy.fileData && !isVideo(copy.name||'') && !copy.fileData.startsWith('idb:') && copy.fileData !== '__video_session_only__'){
+        const k = 'idb:f'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+        writes.push(idbPut(k, copy.fileData)); copy.fileData = k;
       }
-      renderBoardList(store2);
+      if(copy.children) copy.children = copy.children.map(ch=>{
+        const c = {...ch};
+        if(c.fileData && !c.fileData.startsWith('idb:')){
+          const k = 'idb:c'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+          writes.push(idbPut(k, c.fileData)); c.fileData = k;
+        }
+        return c;
+      });
+      return copy;
     });
+    let strippedBgImage = imported.bgImage;
+    if(strippedBgImage && strippedBgImage.startsWith('data:')){
+      const k = 'idb:bg'+Date.now();
+      writes.push(idbPut(k, strippedBgImage)); strippedBgImage = k;
+    }
+    await Promise.all(writes);
+
+    const stripped = {...imported, items: strippedItems, bgImage: strippedBgImage};
+    const store = loadStorage() || {boards:[], activeId:null};
+    store.boards.push(stripped);
+    store.activeId = id;
+    saveStorage(store);
+    restoreBoard(imported); // render mit vollen Daten (inkl. base64)
+    renderBoardList(store);
     showInfo('✓ Board geladen: '+boardData.name);
   }catch(err){
     if(err && (err.message||'').includes('cancel')) return;
