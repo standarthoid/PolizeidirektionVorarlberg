@@ -755,7 +755,7 @@ window._pdfjsReady = (function(){
 
 <!-- Board-Lock-Overlay: blockiert alle Klicks/Touches wenn aktiv. z-index muss über
      allem liegen, auch über den layer-svg-Elementen die hartcodiert auf 99999 stehen. -->
-<div id="board-lock-overlay" style="display:none;position:fixed;inset:0;z-index:999990;pointer-events:none;background:transparent;">
+<div id="board-lock-overlay" style="display:none;position:fixed;inset:0;z-index:999990;pointer-events:none;background:transparent;touch-action:none;">
 </div>
 
 <!-- ZOOM -->
@@ -965,12 +965,14 @@ function toggleBoardLock(){
   if(wasLocked){
     document.body.classList.remove('board-locked');
     ov.style.display = 'none';
+    ov.style.pointerEvents = 'none';
     btn.title = 'Board sperren — keine Bearbeitung möglich';
     btn.classList.remove('active');
     // Alle vorher zwangsdeaktivierten Pickers/Modals zurücksetzen
   } else {
     document.body.classList.add('board-locked');
     ov.style.display = 'block';
+    ov.style.pointerEvents = 'auto';
     btn.title = 'Board entsperren';
     btn.classList.add('active');
     // Aktive Selektionen aufheben — sonst wirken sie weiter optisch
@@ -3806,6 +3808,7 @@ function renderFolder(item){
   el.addEventListener('pointerdown',e=>{
     if(e.pointerType==='mouse'&&e.button!==0) return;
     if(S.tool==='pan') return;
+    if(document.body.classList.contains('board-locked')) return;
     const layer=S.layers.find(l=>l.id===item.layerId);
     if(layer&&layer.locked) return;
     e.stopPropagation();
@@ -6880,15 +6883,22 @@ async function openBoardFromFile(){
       showInfo('Datei enthält kein gültiges Board.');
       return;
     }
-    // Als neues Board in den Store eintragen + aktiv setzen
-    const store = loadStorage() || {boards:[], activeId:null};
+    // Board rendern, dann große Mediendaten in IDB auslagern, erst dann localStorage schreiben
     const id = 'board_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
     const imported = {...boardData, id, savedAt: Date.now()};
-    store.boards.push(imported);
-    store.activeId = id;
-    saveStorage(store);
     restoreBoard(imported);
-    renderBoardList(store);
+    captureBoardAsync().then(({board})=>{
+      const store2 = loadStorage() || {boards:[], activeId:null};
+      store2.boards.push({...board, id});
+      store2.activeId = id;
+      if(!saveStorage(store2)){
+        // Letzter Versuch: ohne große bgImage-Daten
+        const stripped = {...board, id, bgImage: board.bgImage?.startsWith('idb:') ? board.bgImage : null};
+        store2.boards[store2.boards.length-1] = stripped;
+        saveStorage(store2);
+      }
+      renderBoardList(store2);
+    });
     showInfo('✓ Board geladen: '+boardData.name);
   }catch(err){
     if(err && (err.message||'').includes('cancel')) return;
@@ -7113,25 +7123,18 @@ function init(){
     setTimeout(applyLayerOrder,100);  // draw-layers z-index initial setzen
     $('boards-btn-label').textContent=`Boards (${store.boards.length})`;
   } else {
-    // First launch — create default board
+    // Erster Start oder Cache geleert — leeres Board erstellen, kein Demo-Inhalt
     const id='board_'+Date.now();
     const store={activeId:id,boards:[]};
-    resetView();
-    // Demo items
-    createItem('folder',{name:'Projekt Assets',x:120,y:100,w:220,children:['logo.svg','banner.psd','icons.ai']});
-    createItem('folder',{name:'Dokumente',x:400,y:100,w:200,children:['brief.docx','vertrag.pdf']});
-    createItem('file',{name:'konzept.pdf',x:120,y:310,viewMode:'icon'});
-    createItem('file',{name:'budget.xlsx',x:230,y:310,viewMode:'icon'});
-    createItem('note',{x:500,y:110,w:210,h:140,text:'📌 Deadline: 20. Juni!\nMeeting Mi 10 Uhr\nBregenz Set ✓',colorIdx:0});
-    createItem('note',{x:500,y:280,w:210,h:120,text:'💡 Tipp: ⊞ Boards für\nmehrere Canvases',colorIdx:1});
-    const data=captureBoard();
-    store.boards.push({id,...data,name:'Mein Board'});
+    const blank={id,name:'Mein Board',items:[],drawings:'',zoom:1,panX:80,panY:80,
+      gridVisible:true,bgImage:null,bgColor:'#0e0f11',bgOpacity:85,bgSize:'cover',
+      layers:[{id:1,name:'Ebene 1',visible:true,locked:false}],
+      activeLayerId:1,nextLayerId:2,savedAt:Date.now()};
+    store.boards.push(blank);
     saveStorage(store);
+    restoreBoard(blank);
   }
 }
-init();
-setTimeout(cleanupIdbOrphans, 5000); // clean up unused file data
-
 init();
 setTimeout(cleanupIdbOrphans, 5000);
 
